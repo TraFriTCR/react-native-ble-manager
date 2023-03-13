@@ -104,7 +104,7 @@ public class Peripheral extends BluetoothGattCallback {
 	}
 
 	public void connect(final Callback callback, Activity activity) {
-		mainHandler.post(() -> {
+		if (!enqueue(() -> {
 			if (!connected) {
 				BluetoothDevice device = getDevice();
 				this.connectCallback = callback;
@@ -130,11 +130,17 @@ public class Peripheral extends BluetoothGattCallback {
 			} else {
 				if (gatt != null) {
 					callback.invoke();
+					connectCallback = null;
+					completedCommand();
 				} else {
 					callback.invoke("BluetoothGatt is null");
+					connectCallback = null;
+					completedCommand();
 				}
 			}
-		});
+		})) {
+			callback.invoke("Internal error: failed to enqueue operation");
+		}
 	}
 	// bt_btif : Register with GATT stack failed.
 
@@ -303,10 +309,8 @@ public class Peripheral extends BluetoothGattCallback {
 				discoverServicesRunnable = new Runnable() {
 					@Override
 					public void run() {
-						try {
+						if (gatt != null) {
 							gatt.discoverServices();
-						} catch (NullPointerException e) {
-							Log.d(BleManager.LOG_TAG, "onConnectionStateChange connected but gatt of Run method was null");
 						}
 						discoverServicesRunnable = null;
 					}
@@ -320,6 +324,7 @@ public class Peripheral extends BluetoothGattCallback {
 					Log.d(BleManager.LOG_TAG, "Connected to: " + device.getAddress());
 					connectCallback.invoke();
 					connectCallback = null;
+					completedCommand();
 				}
 
 			} else if (newState == BluetoothProfile.STATE_DISCONNECTED || status != BluetoothGatt.GATT_SUCCESS) {
@@ -342,6 +347,7 @@ public class Peripheral extends BluetoothGattCallback {
 				if (connectCallback != null) {
 					connectCallback.invoke("Connection error");
 					connectCallback = null;
+					completedCommand();
 				}
 				writeCallback = null;
 				writeQueue.clear();
@@ -709,14 +715,6 @@ public class Peripheral extends BluetoothGattCallback {
 				return;
 			}
 
-			// Check if we still have a valid gatt object
-			if (gatt == null) {
-				Log.d(BleManager.LOG_TAG, "Error, gatt is null");
-				commandQueue.clear();
-				commandQueueBusy = false;
-				return;
-			}
-
 			// Execute the next command in the queue
 			commandQueueBusy = true;
 			mainHandler.post(new Runnable() {
@@ -759,6 +757,11 @@ public class Peripheral extends BluetoothGattCallback {
 	public void refreshCache(Callback callback) {
 		enqueue(() -> {
 			try {
+				if (gatt == null) {
+					callback.invoke("BluetoothGatt is null");
+					connectCallback = null;
+					completedCommand();
+				}
 				Method localMethod = gatt.getClass().getMethod("refresh", new Class[0]);
 				if (localMethod != null) {
 					boolean res = ((Boolean) localMethod.invoke(gatt, new Object[0])).booleanValue();
@@ -828,6 +831,13 @@ public class Peripheral extends BluetoothGattCallback {
 					writeCallback = callback;
 				else
 					writeCallback = null;
+
+				if (gatt == null) {
+					writeCallback.invoke("Write failed: gatt is null");
+					writeCallback = null;
+					completedCommand();
+				}
+
 				if (!gatt.writeCharacteristic(characteristic)) {
 					// write without response, caller will handle the callback
 					if (writeCallback != null) {
