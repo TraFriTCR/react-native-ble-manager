@@ -19,6 +19,8 @@
 @property (strong, nonatomic) NSMutableSet *peripherals;
 @property (strong, nonatomic) CBCentralManager *manager;
 @property (weak, nonatomic) NSTimer *scanTimer;
+@property (strong, nonatomic) NSMutableArray *commandQueue;
+@property (strong, nonatomic) dispatch_queue_t commandDispatch;
 
 // Returns the static CBCentralManager instance used by this library.
 // May have unexpected behavior when using multiple instances of CBCentralManager.
