@@ -27,7 +27,7 @@ bool hasListeners;
     
     if (self = [super init]) {
         peripherals = [NSMutableSet set];
-        connectCallbacks = [NSMutableDictionary new];
+        connectCallback =  nil;
         retrieveServicesLatches = [NSMutableDictionary new];
         readCallbacks = [NSMutableDictionary new];
         readRSSICallbacks = [NSMutableDictionary new];
@@ -459,37 +459,42 @@ RCT_EXPORT_METHOD(stopScan:(nonnull RCTResponseSenderBlock)callback)
 RCT_EXPORT_METHOD(connect:(NSString *)peripheralUUID callback:(nonnull RCTResponseSenderBlock)callback)
 {
     NSLog(@"Connect");
-    CBPeripheral *peripheral = [self findPeripheralByUUID:peripheralUUID];
-    if (peripheral == nil){
-        // Try to retrieve the peripheral
-        NSLog(@"Retrieving peripheral with UUID : %@", peripheralUUID);
-        NSUUID *uuid = [[NSUUID alloc]initWithUUIDString:peripheralUUID];
-        if (uuid != nil) {
-            NSArray<CBPeripheral *> *peripheralArray = [manager retrievePeripheralsWithIdentifiers:@[uuid]];
-            if([peripheralArray count] > 0){
-                peripheral = [peripheralArray objectAtIndex:0];
-                @synchronized(peripherals) {
-                    [peripherals addObject:peripheral];
+    
+    [self enqueueCommand:^{
+        CBPeripheral *peripheral = [self findPeripheralByUUID:peripheralUUID];
+        if (peripheral == nil) {
+            // Try to retrieve the peripheral
+            NSLog(@"Retrieving peripheral with UUID : %@", peripheralUUID);
+            NSUUID *uuid = [[NSUUID alloc]initWithUUIDString:peripheralUUID];
+            if (uuid != nil) {
+                NSArray<CBPeripheral *> *peripheralArray = [manager retrievePeripheralsWithIdentifiers:@[uuid]];
+                if([peripheralArray count] > 0){
+                    peripheral = [peripheralArray objectAtIndex:0];
+                    @synchronized(peripherals) {
+                        [peripherals addObject:peripheral];
+                    }
+                    NSLog(@"Successfull retrieved peripheral with UUID : %@", peripheralUUID);
                 }
-                NSLog(@"Successfull retrieved peripheral with UUID : %@", peripheralUUID);
+            } else {
+                NSString *error = [NSString stringWithFormat:@"Wrong UUID format %@", peripheralUUID];
+                callback(@[error, [NSNull null]]);
+                [self completedCommand];
+                return;
             }
-        } else {
-            NSString *error = [NSString stringWithFormat:@"Wrong UUID format %@", peripheralUUID];
-            callback(@[error, [NSNull null]]);
-            return;
         }
-    }
-    if (peripheral) {
-        NSLog(@"Connecting to peripheral with UUID : %@", peripheralUUID);
-        
-        [connectCallbacks setObject:callback forKey:[peripheral uuidAsString]];
-        [manager connectPeripheral:peripheral options:nil];
-        
-    } else {
-        NSString *error = [NSString stringWithFormat:@"Could not find peripheral %@.", peripheralUUID];
-        NSLog(@"%@", error);
-        callback(@[error, [NSNull null]]);
-    }
+        if (peripheral) {
+            NSLog(@"Connecting to peripheral with UUID : %@", peripheralUUID);
+            
+            connectCallback = callback;
+            [manager connectPeripheral:peripheral options:nil];
+            
+        } else {
+            NSString *error = [NSString stringWithFormat:@"Could not find peripheral %@.", peripheralUUID];
+            NSLog(@"%@", error);
+            callback(@[error, [NSNull null]]);
+            [self completedCommand];
+        }
+    }];
 }
 
 RCT_EXPORT_METHOD(disconnect:(NSString *)peripheralUUID force:(BOOL)force callback:(nonnull RCTResponseSenderBlock)callback)
@@ -532,11 +537,12 @@ RCT_EXPORT_METHOD(checkState)
 {
     NSString *errorStr = [NSString stringWithFormat:@"Peripheral connection failure: %@. (%@)", peripheral, [error localizedDescription]];
     NSLog(@"%@", errorStr);
-    RCTResponseSenderBlock connectCallback = [connectCallbacks valueForKey:[peripheral uuidAsString]];
+
     
     if (connectCallback) {
         connectCallback(@[errorStr]);
-        [connectCallbacks removeObjectForKey:[peripheral uuidAsString]];
+        connectCallback = nil;
+        [self completedCommand];
     }
 }
 
@@ -824,14 +830,13 @@ RCT_EXPORT_METHOD(requestMTU:(NSString *)deviceUUID mtu:(NSInteger)mtu callback:
     // The state of the peripheral isn't necessarily updated until a small delay after didConnectPeripheral is called
     // and in the meantime didFailToConnectPeripheral may be called
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.002 * NSEC_PER_SEC),
-                   dispatch_get_main_queue(), ^(void){
+                   commandDispatch, ^(void){
         // didFailToConnectPeripheral should have been called already if not connected by now
-        
-        RCTResponseSenderBlock connectCallback = [connectCallbacks valueForKey:[peripheral uuidAsString]];
         
         if (connectCallback) {
             connectCallback(@[[NSNull null], [peripheral asDictionary]]);
-            [connectCallbacks removeObjectForKey:[peripheral uuidAsString]];
+            connectCallback = nil;
+            [self completedCommand];
         }
         
         if (hasListeners) {
@@ -854,10 +859,9 @@ RCT_EXPORT_METHOD(requestMTU:(NSString *)deviceUUID mtu:(NSInteger)mtu callback:
         
         NSString *errorStr = [NSString stringWithFormat:@"Peripheral did disconnect: %@", peripheralUUIDString];
         
-        RCTResponseSenderBlock connectCallback = [connectCallbacks valueForKey:peripheralUUIDString];
         if (connectCallback) {
             connectCallback(@[errorStr]);
-            [connectCallbacks removeObjectForKey:peripheralUUIDString];
+            connectCallback = nil;
         }
         
         RCTResponseSenderBlock readRSSICallback = [readRSSICallbacks valueForKey:peripheralUUIDString];

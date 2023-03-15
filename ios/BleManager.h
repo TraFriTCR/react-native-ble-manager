@@ -5,7 +5,7 @@
 
 @interface BleManager : RCTEventEmitter <RCTBridgeModule, CBCentralManagerDelegate, CBPeripheralDelegate>{
     NSString* discoverPeripherialCallbackId;
-    NSMutableDictionary* connectCallbacks;
+    RCTResponseSenderBlock connectCallback;
     NSMutableDictionary *readCallbacks;
     NSMutableDictionary *writeCallbacks;
     NSMutableDictionary *readRSSICallbacks;
