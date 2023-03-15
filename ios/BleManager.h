@@ -8,7 +8,7 @@
     RCTResponseSenderBlock connectCallback;
     NSMutableDictionary *readCallbacks;
     NSMutableDictionary *writeCallbacks;
-    NSMutableDictionary *readRSSICallbacks;
+    RCTResponseSenderBlock readRSSICallback;
     NSMutableDictionary *retrieveServicesCallbacks;
     NSMutableArray *writeQueue;
     NSMutableDictionary *notificationCallbacks;

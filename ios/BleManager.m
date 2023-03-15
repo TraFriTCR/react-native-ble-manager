@@ -30,7 +30,7 @@ bool hasListeners;
         connectCallback =  nil;
         retrieveServicesLatches = [NSMutableDictionary new];
         readCallbacks = [NSMutableDictionary new];
-        readRSSICallbacks = [NSMutableDictionary new];
+        readRSSICallback = nil;
         retrieveServicesCallbacks = [NSMutableDictionary new];
         writeCallbacks = [NSMutableDictionary new];
         writeQueue = [NSMutableArray array];
@@ -538,12 +538,13 @@ RCT_EXPORT_METHOD(checkState)
     NSString *errorStr = [NSString stringWithFormat:@"Peripheral connection failure: %@. (%@)", peripheral, [error localizedDescription]];
     NSLog(@"%@", errorStr);
 
-    
-    if (connectCallback) {
-        connectCallback(@[errorStr]);
-        connectCallback = nil;
-        [self completedCommand];
-    }
+    dispatch_async(commandDispatch, ^{
+        if (connectCallback) {
+            connectCallback(@[errorStr]);
+            connectCallback = nil;
+            [self completedCommand];
+        }
+    });
 }
 
 RCT_EXPORT_METHOD(write:(NSString *)deviceUUID serviceUUID:(NSString*)serviceUUID  characteristicUUID:(NSString*)characteristicUUID message:(NSArray*)message maxByteSize:(NSInteger)maxByteSize callback:(nonnull RCTResponseSenderBlock)callback)
@@ -669,16 +670,17 @@ RCT_EXPORT_METHOD(readRSSI:(NSString *)deviceUUID callback:(nonnull RCTResponseS
 {
     NSLog(@"readRSSI");
     
-    CBPeripheral *peripheral = [self findPeripheralByUUID:deviceUUID];
-    
-    if (peripheral && peripheral.state == CBPeripheralStateConnected) {
-        [readRSSICallbacks setObject:callback forKey:[peripheral uuidAsString]];
-        [peripheral readRSSI];
-    } else {
-        callback(@[@"Peripheral not found or not connected"]);
-        [self completedCommand];
-    }
-    
+    [self enqueueCommand: ^{
+        CBPeripheral *peripheral = [self findPeripheralByUUID:deviceUUID];
+        
+        if (peripheral && peripheral.state == CBPeripheralStateConnected) {
+            readRSSICallback = callback;
+            [peripheral readRSSI];
+        } else {
+            callback(@[@"Peripheral not found or not connected"]);
+            [self completedCommand];
+        }
+    }];
 }
 
 RCT_EXPORT_METHOD(retrieveServices:(NSString *)deviceUUID services:(NSArray<NSString *> *)services callback:(nonnull RCTResponseSenderBlock)callback)
@@ -809,14 +811,15 @@ RCT_EXPORT_METHOD(requestMTU:(NSString *)deviceUUID mtu:(NSInteger)mtu callback:
 
 - (void)peripheral:(CBPeripheral*)peripheral didReadRSSI:(NSNumber*)rssi error:(NSError*)error {
     NSLog(@"didReadRSSI %@", rssi);
+    
     dispatch_async(commandDispatch, ^{
         NSString *key = [peripheral uuidAsString];
-        RCTResponseSenderBlock readRSSICallback = [readRSSICallbacks objectForKey: key];
+        
         if (readRSSICallback) {
             readRSSICallback(@[[NSNull null], [NSNumber numberWithInteger:[rssi integerValue]]]);
-            [readRSSICallbacks removeObjectForKey:key];
+            readRSSICallback = nil;
+            [self completedCommand];
         }
-        [self completedCommand];
     });
 }
 
@@ -864,10 +867,9 @@ RCT_EXPORT_METHOD(requestMTU:(NSString *)deviceUUID mtu:(NSInteger)mtu callback:
             connectCallback = nil;
         }
         
-        RCTResponseSenderBlock readRSSICallback = [readRSSICallbacks valueForKey:peripheralUUIDString];
         if (readRSSICallback) {
             readRSSICallback(@[errorStr]);
-            [readRSSICallbacks removeObjectForKey:peripheralUUIDString];
+            readRSSICallback = nil;
         }
         
         RCTResponseSenderBlock retrieveServicesCallback = [retrieveServicesCallbacks valueForKey:peripheralUUIDString];
