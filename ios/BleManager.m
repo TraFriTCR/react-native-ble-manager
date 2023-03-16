@@ -28,10 +28,10 @@ bool hasListeners;
     if (self = [super init]) {
         peripherals = [NSMutableSet set];
         connectCallback =  nil;
-        retrieveServicesLatches = [NSMutableDictionary new];
+        retrieveServicesLatch = [NSMutableSet new];
         readCallbacks = [NSMutableDictionary new];
         readRSSICallback = nil;
-        retrieveServicesCallbacks = [NSMutableDictionary new];
+        retrieveServicesCallback = nil;
         writeCallbacks = [NSMutableDictionary new];
         writeQueue = [NSMutableArray array];
         notificationCallbacks = [NSMutableDictionary new];
@@ -374,6 +374,8 @@ RCT_EXPORT_METHOD(start:(NSDictionary *)options callback:(nonnull RCTResponseSen
         _sharedManager = manager;
     }
     
+    [self resetCommandQueue];
+    
     callback(@[]);
 }
 
@@ -687,26 +689,29 @@ RCT_EXPORT_METHOD(retrieveServices:(NSString *)deviceUUID services:(NSArray<NSSt
 {
     NSLog(@"retrieveServices %@", services);
     
-    CBPeripheral *peripheral = [self findPeripheralByUUID:deviceUUID];
-    
-    if (peripheral && peripheral.state == CBPeripheralStateConnected) {
-        [retrieveServicesCallbacks setObject:callback forKey:[peripheral uuidAsString]];
+    [self enqueueCommand:^{
+        CBPeripheral *peripheral = [self findPeripheralByUUID:deviceUUID];
         
-        NSMutableArray<CBUUID *> *uuids = [NSMutableArray new];
-        for ( NSString *string in services ) {
-            CBUUID *uuid = [CBUUID UUIDWithString:string];
-            [uuids addObject:uuid];
-        }
-        
-        if ( uuids.count > 0 ) {
-            [peripheral discoverServices:uuids];
+        if (peripheral && peripheral.state == CBPeripheralStateConnected) {
+            retrieveServicesCallback = callback;
+
+            NSMutableArray<CBUUID *> *uuids = [NSMutableArray new];
+            for ( NSString *string in services ) {
+                CBUUID *uuid = [CBUUID UUIDWithString:string];
+                [uuids addObject:uuid];
+            }
+            
+            if ( uuids.count > 0 ) {
+                [peripheral discoverServices:uuids];
+            } else {
+                [peripheral discoverServices:nil];
+            }
+            
         } else {
-            [peripheral discoverServices:nil];
+            callback(@[@"Peripheral not found or not connected"]);
+            [self completedCommand];
         }
-        
-    } else {
-        callback(@[@"Peripheral not found or not connected"]);
-    }
+    }];
 }
 
 RCT_EXPORT_METHOD(startNotification:(NSString *)deviceUUID serviceUUID:(NSString*)serviceUUID  characteristicUUID:(NSString*)characteristicUUID callback:(nonnull RCTResponseSenderBlock)callback)
@@ -872,10 +877,9 @@ RCT_EXPORT_METHOD(requestMTU:(NSString *)deviceUUID mtu:(NSInteger)mtu callback:
             readRSSICallback = nil;
         }
         
-        RCTResponseSenderBlock retrieveServicesCallback = [retrieveServicesCallbacks valueForKey:peripheralUUIDString];
         if (retrieveServicesCallback) {
             retrieveServicesCallback(@[errorStr]);
-            [retrieveServicesCallbacks removeObjectForKey:peripheralUUIDString];
+            retrieveServicesCallback = nil;
         }
         
         NSArray* ourReadCallbacks = readCallbacks.allKeys;
@@ -938,16 +942,27 @@ RCT_EXPORT_METHOD(requestMTU:(NSString *)deviceUUID mtu:(NSInteger)mtu callback:
     });
 }
 
+- (void) handleDiscoverServiceError:(NSError *)error
+{
+    NSLog(@"Error: %@", error);
+    [retrieveServicesLatch removeAllObjects];
+    dispatch_async(commandQueue, ^{
+        if (retrieveServicesCallback != nil) {
+            retrieveServicesCallback(@[error, [NSNull null]]);
+            retrieveServicesCallback = nil;
+            [self completedCommand];
+        }
+    });
+}
+
 - (void)peripheral:(CBPeripheral *)peripheral didDiscoverServices:(NSError *)error {
     if (error) {
-        NSLog(@"Error: %@", error);
+        [self handleDiscoverServiceError:error];
         return;
     }
     NSLog(@"Services Discover");
     
-    NSMutableSet *servicesForPeriperal = [NSMutableSet new];
-    [servicesForPeriperal addObjectsFromArray:peripheral.services];
-    [retrieveServicesLatches setObject:servicesForPeriperal forKey:[peripheral uuidAsString]];
+    [retrieveServicesLatch addObjectsFromArray:peripheral.services];
     for (CBService *service in peripheral.services) {
         NSLog(@"Service %@ %@", service.UUID, service.description);
         [peripheral discoverIncludedServices:nil forService:service]; // discover included services
@@ -956,28 +971,34 @@ RCT_EXPORT_METHOD(requestMTU:(NSString *)deviceUUID mtu:(NSInteger)mtu callback:
 }
 
 - (void)peripheral:(CBPeripheral *)peripheral didDiscoverIncludedServicesForService:(CBService *)service error:(NSError *)error {
+    if (error) {
+        [self handleDiscoverServiceError:error];
+        return;
+    }
     [peripheral discoverCharacteristics:nil forService:service]; // discover characteristics for included service
 }
 
 - (void)peripheral:(CBPeripheral *)peripheral didDiscoverCharacteristicsForService:(CBService *)service error:(NSError *)error {
     if (error) {
-        NSLog(@"Error: %@", error);
+        [self handleDiscoverServiceError:error];
         return;
     }
     NSLog(@"Characteristics For Service Discover");
     
     NSString *peripheralUUIDString = [peripheral uuidAsString];
-    NSMutableSet *latch = [retrieveServicesLatches valueForKey:peripheralUUIDString];
-    [latch removeObject:service];
+    [retrieveServicesLatch removeObject:service];
     
-    if ([latch count] == 0) {
-        // Call success callback for connect
-        RCTResponseSenderBlock retrieveServiceCallback = [retrieveServicesCallbacks valueForKey:peripheralUUIDString];
-        if (retrieveServiceCallback) {
-            retrieveServiceCallback(@[[NSNull null], [peripheral asDictionary]]);
-            [retrieveServicesCallbacks removeObjectForKey:peripheralUUIDString];
-        }
-        [retrieveServicesLatches removeObjectForKey:peripheralUUIDString];
+    if ([retrieveServicesLatch count] == 0) {
+        dispatch_async(commandDispatch, ^{
+            
+            // Call success callback for connect
+            if (retrieveServicesCallback) {
+                retrieveServicesCallback(@[[NSNull null], [peripheral asDictionary]]);
+                retrieveServicesCallback = nil;
+                [self completedCommand];
+            }
+            
+        });
     }
 }
 

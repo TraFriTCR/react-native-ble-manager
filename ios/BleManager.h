@@ -4,16 +4,15 @@
 
 
 @interface BleManager : RCTEventEmitter <RCTBridgeModule, CBCentralManagerDelegate, CBPeripheralDelegate>{
-    NSString* discoverPeripherialCallbackId;
     RCTResponseSenderBlock connectCallback;
     NSMutableDictionary *readCallbacks;
     NSMutableDictionary *writeCallbacks;
     RCTResponseSenderBlock readRSSICallback;
-    NSMutableDictionary *retrieveServicesCallbacks;
+    RCTResponseSenderBlock retrieveServicesCallback;
     NSMutableArray *writeQueue;
     NSMutableDictionary *notificationCallbacks;
     NSMutableDictionary *stopNotificationCallbacks;
-    NSMutableDictionary *retrieveServicesLatches;
+    NSMutableSet *retrieveServicesLatch;
 }
 
 @property (strong, nonatomic) NSMutableSet *peripherals;
