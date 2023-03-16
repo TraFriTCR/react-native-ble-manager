@@ -5,7 +5,8 @@
 
 @interface BleManager : RCTEventEmitter <RCTBridgeModule, CBCentralManagerDelegate, CBPeripheralDelegate>{
     RCTResponseSenderBlock connectCallback;
-    NSMutableDictionary *readCallbacks;
+    RCTResponseSenderBlock readCallback;
+    NSString *readCallbackKey; // needed due to possible collisions with notifies
     NSMutableDictionary *writeCallbacks;
     RCTResponseSenderBlock readRSSICallback;
     RCTResponseSenderBlock retrieveServicesCallback;
