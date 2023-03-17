@@ -33,7 +33,7 @@ bool hasListeners;
         readCallbackKey = @"";
         readRSSICallback = nil;
         retrieveServicesCallback = nil;
-        writeCallbacks = [NSMutableDictionary new];
+        writeCallback = nil;
         writeQueue = [NSMutableArray array];
         notificationCallbacks = [NSMutableDictionary new];
         stopNotificationCallbacks = [NSMutableDictionary new];
@@ -559,52 +559,56 @@ RCT_EXPORT_METHOD(write:(NSString *)deviceUUID serviceUUID:(NSString*)serviceUUI
 {
     NSLog(@"Write");
     
-    BLECommandContext *context = [self getData:deviceUUID serviceUUIDString:serviceUUID characteristicUUIDString:characteristicUUID prop:CBCharacteristicPropertyWrite callback:callback];
-    
-    unsigned long c = [message count];
-    uint8_t *bytes = malloc(sizeof(*bytes) * c);
-    
-    unsigned i;
-    for (i = 0; i < c; i++)
-    {
-        NSNumber *number = [message objectAtIndex:i];
-        int byte = [number intValue];
-        bytes[i] = byte;
-    }
-    NSData *dataMessage = [NSData dataWithBytesNoCopy:bytes length:c freeWhenDone:YES];
-    
-    if (context) {
-        RCTLogInfo(@"Message to write(%lu): %@ ", (unsigned long)[message count], message);
-        CBPeripheral *peripheral = [context peripheral];
-        CBCharacteristic *characteristic = [context characteristic];
+    [self enqueueCommand:^{
         
-        NSString *key = [self keyForPeripheral: peripheral andCharacteristic:characteristic];
-        [writeCallbacks setObject:callback forKey:key];
+        BLECommandContext *context = [self getData:deviceUUID serviceUUIDString:serviceUUID characteristicUUIDString:characteristicUUID prop:CBCharacteristicPropertyWrite callback:callback];
         
-        RCTLogInfo(@"Message to write(%lu): %@ ", (unsigned long)[dataMessage length], [dataMessage hexadecimalString]);
-        if ([dataMessage length] > maxByteSize){
-            int dataLength = (int)dataMessage.length;
-            int count = 0;
-            NSData* firstMessage;
-            while(count < dataLength && (dataLength - count > maxByteSize)){
-                if (count == 0){
-                    firstMessage = [dataMessage subdataWithRange:NSMakeRange(count, maxByteSize)];
-                }else{
-                    NSData* splitMessage = [dataMessage subdataWithRange:NSMakeRange(count, maxByteSize)];
+        unsigned long c = [message count];
+        uint8_t *bytes = malloc(sizeof(*bytes) * c);
+        
+        unsigned i;
+        for (i = 0; i < c; i++)
+        {
+            NSNumber *number = [message objectAtIndex:i];
+            int byte = [number intValue];
+            bytes[i] = byte;
+        }
+        NSData *dataMessage = [NSData dataWithBytesNoCopy:bytes length:c freeWhenDone:YES];
+        
+        if (context) {
+            RCTLogInfo(@"Message to write(%lu): %@ ", (unsigned long)[message count], message);
+            CBPeripheral *peripheral = [context peripheral];
+            CBCharacteristic *characteristic = [context characteristic];
+            
+            writeCallback = callback;
+            
+            RCTLogInfo(@"Message to write(%lu): %@ ", (unsigned long)[dataMessage length], [dataMessage hexadecimalString]);
+            if ([dataMessage length] > maxByteSize) {
+                int dataLength = (int)dataMessage.length;
+                int count = 0;
+                NSData* firstMessage;
+                while(count < dataLength && (dataLength - count > maxByteSize)){
+                    if (count == 0){
+                        firstMessage = [dataMessage subdataWithRange:NSMakeRange(count, maxByteSize)];
+                    }else{
+                        NSData* splitMessage = [dataMessage subdataWithRange:NSMakeRange(count, maxByteSize)];
+                        [writeQueue addObject:splitMessage];
+                    }
+                    count += maxByteSize;
+                }
+                if (count < dataLength) {
+                    NSData* splitMessage = [dataMessage subdataWithRange:NSMakeRange(count, dataLength - count)];
                     [writeQueue addObject:splitMessage];
                 }
-                count += maxByteSize;
+                NSLog(@"Queued splitted message: %lu", (unsigned long)[writeQueue count]);
+                [peripheral writeValue:firstMessage forCharacteristic:characteristic type:CBCharacteristicWriteWithResponse];
+            } else {
+                [peripheral writeValue:dataMessage forCharacteristic:characteristic type:CBCharacteristicWriteWithResponse];
             }
-            if (count < dataLength) {
-                NSData* splitMessage = [dataMessage subdataWithRange:NSMakeRange(count, dataLength - count)];
-                [writeQueue addObject:splitMessage];
-            }
-            NSLog(@"Queued splitted message: %lu", (unsigned long)[writeQueue count]);
-            [peripheral writeValue:firstMessage forCharacteristic:characteristic type:CBCharacteristicWriteWithResponse];
         } else {
-            [peripheral writeValue:dataMessage forCharacteristic:characteristic type:CBCharacteristicWriteWithResponse];
+            [self completedCommand];
         }
-    }
+    }];
 }
 
 
@@ -673,7 +677,6 @@ RCT_EXPORT_METHOD(read:(NSString *)deviceUUID serviceUUID:(NSString*)serviceUUID
             readCallbackKey = key;
             [peripheral readValueForCharacteristic:characteristic];  // callback sends value
         } else {
-            callback(@[@"Ble context is not active, was start() invoked?", [NSNull null] ]);
             [self completedCommand];
         }
     }];
@@ -800,28 +803,29 @@ RCT_EXPORT_METHOD(requestMTU:(NSString *)deviceUUID mtu:(NSInteger)mtu callback:
 - (void)peripheral:(CBPeripheral *)peripheral didWriteValueForCharacteristic:(CBCharacteristic *)characteristic error:(NSError *)error {
     NSLog(@"didWrite");
     
-    NSString *key = [self keyForPeripheral: peripheral andCharacteristic:characteristic];
-    RCTResponseSenderBlock writeCallback = [writeCallbacks objectForKey:key];
-    
-    if (writeCallback) {
-        if (error) {
-            NSLog(@"%@", error);
-            [writeCallbacks removeObjectForKey:key];
-            writeCallback(@[error.localizedDescription]);
-        } else {
-            if ([writeQueue count] == 0) {
-                [writeCallbacks removeObjectForKey:key];
-                writeCallback(@[]);
-            }else{
-                // Remove and write the queud message
-                NSData *message = [writeQueue objectAtIndex:0];
-                [writeQueue removeObjectAtIndex:0];
-                [peripheral writeValue:message forCharacteristic:characteristic type:CBCharacteristicWriteWithResponse];
+    dispatch_async(commandDispatch, ^{
+        if (writeCallback) {
+            if (error) {
+                NSLog(@"%@", error);
+                [writeQueue removeAllObjects];
+                writeCallback(@[error.localizedDescription]);
+                writeCallback = nil;
+                [self completedCommand];
+            } else {
+                if ([writeQueue count] == 0) {
+                    writeCallback(@[]);
+                    writeCallback = nil;
+                    [self completedCommand];
+                } else {
+                    // Remove and write the queud message
+                    NSData *message = [writeQueue objectAtIndex:0];
+                    [writeQueue removeObjectAtIndex:0];
+                    [peripheral writeValue:message forCharacteristic:characteristic type:CBCharacteristicWriteWithResponse];
+                }
+                
             }
-            
         }
-    }
-    
+    });
 }
 
 
@@ -829,8 +833,6 @@ RCT_EXPORT_METHOD(requestMTU:(NSString *)deviceUUID mtu:(NSInteger)mtu callback:
     NSLog(@"didReadRSSI %@", rssi);
     
     dispatch_async(commandDispatch, ^{
-        NSString *key = [peripheral uuidAsString];
-        
         if (readRSSICallback) {
             readRSSICallback(@[[NSNull null], [NSNumber numberWithInteger:[rssi integerValue]]]);
             readRSSICallback = nil;
@@ -838,8 +840,6 @@ RCT_EXPORT_METHOD(requestMTU:(NSString *)deviceUUID mtu:(NSInteger)mtu callback:
         }
     });
 }
-
-
 
 - (void)centralManager:(CBCentralManager *)central didConnectPeripheral:(CBPeripheral *)peripheral
 {
@@ -875,7 +875,7 @@ RCT_EXPORT_METHOD(requestMTU:(NSString *)deviceUUID mtu:(NSInteger)mtu callback:
     
     dispatch_async(commandDispatch, ^{
         NSString *peripheralUUIDString = [peripheral uuidAsString];
-        
+           
         NSString *errorStr = [NSString stringWithFormat:@"Peripheral did disconnect: %@", peripheralUUIDString];
         
         if (connectCallback) {
@@ -898,15 +898,9 @@ RCT_EXPORT_METHOD(requestMTU:(NSString *)deviceUUID mtu:(NSInteger)mtu callback:
             readCallback = nil;
         }
         
-        NSArray* ourWriteCallbacks = writeCallbacks.allKeys;
-        for (id key in ourWriteCallbacks) {
-            if ([key hasPrefix:peripheralUUIDString]) {
-                RCTResponseSenderBlock callback = [writeCallbacks objectForKey:key];
-                if (callback) {
-                    callback(@[errorStr]);
-                    [writeCallbacks removeObjectForKey:key];
-                }
-            }
+        if (writeCallback) {
+            writeCallback(@[errorStr]);
+            writeCallback = nil;
         }
         
         NSArray* ourNotificationCallbacks = notificationCallbacks.allKeys;
@@ -939,10 +933,8 @@ RCT_EXPORT_METHOD(requestMTU:(NSString *)deviceUUID mtu:(NSInteger)mtu callback:
                 }
         }
         
-        // all callbacks handled, commandQueue chould be empty now
-        // if a command is being executed then it should find a null callback
         if (commandQueueBusy) {
-            [self resetCommandQueue];
+            [self completedCommand];
         }
     });
 }

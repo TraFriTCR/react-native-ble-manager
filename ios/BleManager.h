@@ -7,7 +7,7 @@
     RCTResponseSenderBlock connectCallback;
     RCTResponseSenderBlock readCallback;
     NSString *readCallbackKey; // needed due to possible collisions with notifies
-    NSMutableDictionary *writeCallbacks;
+    RCTResponseSenderBlock writeCallback;
     RCTResponseSenderBlock readRSSICallback;
     RCTResponseSenderBlock retrieveServicesCallback;
     NSMutableArray *writeQueue;
