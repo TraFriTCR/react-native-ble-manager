@@ -4,21 +4,23 @@
 
 
 @interface BleManager : RCTEventEmitter <RCTBridgeModule, CBCentralManagerDelegate, CBPeripheralDelegate>{
-    NSString* discoverPeripherialCallbackId;
-    NSMutableDictionary* connectCallbacks;
-    NSMutableDictionary *readCallbacks;
-    NSMutableDictionary *writeCallbacks;
-    NSMutableDictionary *readRSSICallbacks;
-    NSMutableDictionary *retrieveServicesCallbacks;
+    RCTResponseSenderBlock connectCallback;
+    RCTResponseSenderBlock readCallback;
+    NSString *readCallbackKey; // needed due to possible collisions with notifies
+    RCTResponseSenderBlock writeCallback;
+    RCTResponseSenderBlock readRSSICallback;
+    RCTResponseSenderBlock retrieveServicesCallback;
     NSMutableArray *writeQueue;
-    NSMutableDictionary *notificationCallbacks;
-    NSMutableDictionary *stopNotificationCallbacks;
-    NSMutableDictionary *retrieveServicesLatches;
+    RCTResponseSenderBlock notificationCallback;
+    NSString *notificationCallbackKey;
+    NSMutableSet *retrieveServicesLatch;
 }
 
 @property (strong, nonatomic) NSMutableSet *peripherals;
 @property (strong, nonatomic) CBCentralManager *manager;
 @property (weak, nonatomic) NSTimer *scanTimer;
+@property (strong, nonatomic) NSMutableArray *commandQueue;
+@property (strong, nonatomic) dispatch_queue_t commandDispatch;
 
 // Returns the static CBCentralManager instance used by this library.
 // May have unexpected behavior when using multiple instances of CBCentralManager.
