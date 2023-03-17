@@ -11,8 +11,8 @@
     RCTResponseSenderBlock readRSSICallback;
     RCTResponseSenderBlock retrieveServicesCallback;
     NSMutableArray *writeQueue;
-    NSMutableDictionary *notificationCallbacks;
-    NSMutableDictionary *stopNotificationCallbacks;
+    RCTResponseSenderBlock notificationCallback;
+    NSString *notificationCallbackKey;
     NSMutableSet *retrieveServicesLatch;
 }
 

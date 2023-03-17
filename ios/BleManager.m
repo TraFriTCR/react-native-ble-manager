@@ -35,8 +35,8 @@ bool hasListeners;
         retrieveServicesCallback = nil;
         writeCallback = nil;
         writeQueue = [NSMutableArray array];
-        notificationCallbacks = [NSMutableDictionary new];
-        stopNotificationCallbacks = [NSMutableDictionary new];
+        notificationCallback = nil;
+        notificationCallbackKey = @"";
         commandQueue = [NSMutableArray new];
         commandDispatch = dispatch_queue_create(NULL, DISPATCH_QUEUE_SERIAL);
         _instance = self;
@@ -116,45 +116,36 @@ bool hasListeners;
 }
 
 - (void)peripheral:(CBPeripheral *)peripheral didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic error:(NSError *)error {
-    if (error) {
-        NSLog(@"Error in didUpdateNotificationStateForCharacteristic: %@", error);
-        if (characteristic == nil){
-            return;
-        }
-        if (hasListeners) {
-            [self sendEventWithName:@"BleManagerDidUpdateNotificationStateFor" body:@{@"peripheral": peripheral.uuidAsString, @"characteristic": characteristic.UUID.UUIDString, @"isNotifying": @(false), @"domain": [error domain], @"code": @(error.code)}];
-        }
-    }
     
     NSString *key = [self keyForPeripheral: peripheral andCharacteristic:characteristic];
     
-    if (characteristic.isNotifying) {
-        RCTResponseSenderBlock notificationCallback = [notificationCallbacks objectForKey:key];
-        if (notificationCallback != nil) {
-            if (error) {
-                notificationCallback(@[error]);
-            } else {
-                NSLog(@"Notification began on %@", characteristic.UUID);
+    bool isValidCallback = ([notificationCallbackKey isEqualToString:key] && notificationCallback != nil);
+    
+    dispatch_async(commandDispatch, ^{
+        if (error) {
+            NSLog(@"Error in didUpdateNotificationStateForCharacteristic: %@", error);
+            if (isValidCallback) {
+                notificationCallback(@[@"Failed to start / stop notification"]);
+                notificationCallback = nil;
+                [self completedCommand];
+            }
+            if (!characteristic){
+                return;
+            } else if (hasListeners) {
+                [self sendEventWithName:@"BleManagerDidUpdateNotificationStateFor" body:@{@"peripheral": peripheral.uuidAsString, @"characteristic": characteristic.UUID.UUIDString, @"isNotifying": @(false), @"domain": [error domain], @"code": @(error.code)}];
+            }
+        } else {
+            if (isValidCallback) {
+                NSLog(@"Successfully started / stopped a notification");
                 notificationCallback(@[]);
+                notificationCallback = nil;
+                [self completedCommand];
             }
-            [notificationCallbacks removeObjectForKey:key];
-        }
-    } else {
-        // Notification has stopped
-        RCTResponseSenderBlock stopNotificationCallback = [stopNotificationCallbacks objectForKey:key];
-        if (stopNotificationCallback != nil) {
-            if (error) {
-                stopNotificationCallback(@[error]);
-            } else {
-                NSLog(@"Notification ended on %@", characteristic.UUID);
-                stopNotificationCallback(@[]);
+            if (hasListeners) {
+                [self sendEventWithName:@"BleManagerDidUpdateNotificationStateFor" body:@{@"peripheral": peripheral.uuidAsString, @"characteristic": characteristic.UUID.UUIDString, @"isNotifying": @(characteristic.isNotifying)}];
             }
-            [stopNotificationCallbacks removeObjectForKey:key];
         }
-    }
-    if (hasListeners) {
-        [self sendEventWithName:@"BleManagerDidUpdateNotificationStateFor" body:@{@"peripheral": peripheral.uuidAsString, @"characteristic": characteristic.UUID.UUIDString, @"isNotifying": @(characteristic.isNotifying)}];
-    }
+    });
 }
 
 
@@ -732,41 +723,52 @@ RCT_EXPORT_METHOD(startNotification:(NSString *)deviceUUID serviceUUID:(NSString
 {
     NSLog(@"startNotification");
     
-    BLECommandContext *context = [self getData:deviceUUID serviceUUIDString:serviceUUID characteristicUUIDString:characteristicUUID prop:CBCharacteristicPropertyNotify callback:callback];
-    
-    if (context) {
-        CBPeripheral *peripheral = [context peripheral];
-        CBCharacteristic *characteristic = [context characteristic];
+    [self enqueueCommand: ^{
+        BLECommandContext *context = [self getData:deviceUUID serviceUUIDString:serviceUUID characteristicUUIDString:characteristicUUID prop:CBCharacteristicPropertyNotify callback:callback];
         
-        NSString *key = [self keyForPeripheral: peripheral andCharacteristic:characteristic];
-        [notificationCallbacks setObject: callback forKey: key];
-        
-        [peripheral setNotifyValue:YES forCharacteristic:characteristic];
-    }
-    
+        if (context) {
+            CBPeripheral *peripheral = [context peripheral];
+            CBCharacteristic *characteristic = [context characteristic];
+            
+            NSString *key = [self keyForPeripheral: peripheral andCharacteristic:characteristic];
+            notificationCallbackKey = key;
+            notificationCallback = callback;
+            
+            [peripheral setNotifyValue:YES forCharacteristic:characteristic];
+        } else {
+            [self completedCommand];
+        }
+    }];
 }
 
 RCT_EXPORT_METHOD(stopNotification:(NSString *)deviceUUID serviceUUID:(NSString*)serviceUUID  characteristicUUID:(NSString*)characteristicUUID callback:(nonnull RCTResponseSenderBlock)callback)
 {
     NSLog(@"stopNotification");
     
-    BLECommandContext *context = [self getData:deviceUUID serviceUUIDString:serviceUUID characteristicUUIDString:characteristicUUID prop:CBCharacteristicPropertyNotify callback:callback];
-    
-    if (context) {
-        CBPeripheral *peripheral = [context peripheral];
-        CBCharacteristic *characteristic = [context characteristic];
+    [self enqueueCommand: ^{
+        BLECommandContext *context = [self getData:deviceUUID serviceUUIDString:serviceUUID characteristicUUIDString:characteristicUUID prop:CBCharacteristicPropertyNotify callback:callback];
         
-        if ([characteristic isNotifying]){
-            NSString *key = [self keyForPeripheral: peripheral andCharacteristic:characteristic];
-            [stopNotificationCallbacks setObject: callback forKey: key];
-            [peripheral setNotifyValue:NO forCharacteristic:characteristic];
-            NSLog(@"Characteristic stopped notifying");
+        if (context) {
+            CBPeripheral *peripheral = [context peripheral];
+            CBCharacteristic *characteristic = [context characteristic];
+            
+            if ([characteristic isNotifying]){
+                NSString *key = [self keyForPeripheral: peripheral andCharacteristic:characteristic];
+                
+                notificationCallbackKey = key;
+                notificationCallback = callback;
+                [peripheral setNotifyValue:NO forCharacteristic:characteristic];
+                NSLog(@"Characteristic stopped notifying");
+            } else {
+                NSLog(@"Characteristic is not notifying");
+                callback(@[]);
+                [self completedCommand];
+            }
+            
         } else {
-            NSLog(@"Characteristic is not notifying");
-            callback(@[]);
+            [self completedCommand];
         }
-        
-    }
+    }];
     
 }
 
@@ -850,6 +852,9 @@ RCT_EXPORT_METHOD(requestMTU:(NSString *)deviceUUID mtu:(NSInteger)mtu callback:
     // and in the meantime didFailToConnectPeripheral may be called
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.002 * NSEC_PER_SEC),
                    commandDispatch, ^(void){
+        [writeQueue removeAllObjects];
+        [retrieveServicesLatch removeAllObjects];
+        
         // didFailToConnectPeripheral should have been called already if not connected by now
         
         if (connectCallback) {
@@ -862,8 +867,7 @@ RCT_EXPORT_METHOD(requestMTU:(NSString *)deviceUUID mtu:(NSInteger)mtu callback:
             [self sendEventWithName:@"BleManagerConnectPeripheral" body:@{@"peripheral": [peripheral uuidAsString]}];
         }
     });
-    
-    [writeQueue removeAllObjects];
+
 }
 
 - (void)centralManager:(CBCentralManager *)central didDisconnectPeripheral:(CBPeripheral *)peripheral error:(NSError *)error {
@@ -903,26 +907,9 @@ RCT_EXPORT_METHOD(requestMTU:(NSString *)deviceUUID mtu:(NSInteger)mtu callback:
             writeCallback = nil;
         }
         
-        NSArray* ourNotificationCallbacks = notificationCallbacks.allKeys;
-        for (id key in ourNotificationCallbacks) {
-            if ([key hasPrefix:peripheralUUIDString]) {
-                RCTResponseSenderBlock callback = [notificationCallbacks objectForKey:key];
-                if (callback) {
-                    callback(@[errorStr]);
-                    [notificationCallbacks removeObjectForKey:key];
-                }
-            }
-        }
-        
-        NSArray* ourStopNotificationsCallbacks = stopNotificationCallbacks.allKeys;
-        for (id key in ourStopNotificationsCallbacks) {
-            if ([key hasPrefix:peripheralUUIDString]) {
-                RCTResponseSenderBlock callback = [stopNotificationCallbacks objectForKey:key];
-                if (callback) {
-                    callback(@[errorStr]);
-                    [stopNotificationCallbacks removeObjectForKey:key];
-                }
-            }
+        if (notificationCallback) {
+            notificationCallback(@[errorStr]);
+            notificationCallback = nil;
         }
         
         if (hasListeners) {
@@ -991,6 +978,7 @@ RCT_EXPORT_METHOD(requestMTU:(NSString *)deviceUUID mtu:(NSInteger)mtu callback:
             // Call success callback for connect
             if (retrieveServicesCallback) {
                 retrieveServicesCallback(@[[NSNull null], [peripheral asDictionary]]);
+                NSLog(@"Finished retrieveServices");
                 retrieveServicesCallback = nil;
                 [self completedCommand];
             }
