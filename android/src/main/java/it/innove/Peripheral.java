@@ -104,7 +104,7 @@ public class Peripheral extends BluetoothGattCallback {
 	}
 
 	public void connect(final Callback callback, Activity activity) {
-		mainHandler.post(() -> {
+		if (!enqueue(() -> {
 			if (!connected) {
 				BluetoothDevice device = getDevice();
 				this.connectCallback = callback;
@@ -130,11 +130,17 @@ public class Peripheral extends BluetoothGattCallback {
 			} else {
 				if (gatt != null) {
 					callback.invoke();
+					connectCallback = null;
+					completedCommand();
 				} else {
 					callback.invoke("BluetoothGatt is null");
+					connectCallback = null;
+					completedCommand();
 				}
 			}
-		});
+		})) {
+			callback.invoke("Internal error: failed to enqueue operation");
+		}
 	}
 	// bt_btif : Register with GATT stack failed.
 
@@ -303,10 +309,8 @@ public class Peripheral extends BluetoothGattCallback {
 				discoverServicesRunnable = new Runnable() {
 					@Override
 					public void run() {
-						try {
+						if (gatt != null) {
 							gatt.discoverServices();
-						} catch (NullPointerException e) {
-							Log.d(BleManager.LOG_TAG, "onConnectionStateChange connected but gatt of Run method was null");
 						}
 						discoverServicesRunnable = null;
 					}
@@ -320,6 +324,7 @@ public class Peripheral extends BluetoothGattCallback {
 					Log.d(BleManager.LOG_TAG, "Connected to: " + device.getAddress());
 					connectCallback.invoke();
 					connectCallback = null;
+					completedCommand();
 				}
 
 			} else if (newState == BluetoothProfile.STATE_DISCONNECTED || status != BluetoothGatt.GATT_SUCCESS) {
@@ -342,6 +347,7 @@ public class Peripheral extends BluetoothGattCallback {
 				if (connectCallback != null) {
 					connectCallback.invoke("Connection error");
 					connectCallback = null;
+					completedCommand();
 				}
 				writeCallback = null;
 				writeQueue.clear();
@@ -593,6 +599,7 @@ public class Peripheral extends BluetoothGattCallback {
 			this.setNotify(serviceUUID, characteristicUUID, true, callback);
 		})) {
 			Log.e(BleManager.LOG_TAG, "Could not enqueue setNotify command to register notify");
+			callback.invoke("Internal error: failed to enqueue operation");
 		}
 	}
 
@@ -607,6 +614,7 @@ public class Peripheral extends BluetoothGattCallback {
 			this.setNotify(serviceUUID, characteristicUUID, false, callback);
 		})) {
 			Log.e(BleManager.LOG_TAG, "Could not enqueue setNotify command to remove notify");
+			callback.invoke("Internal error: failed to enqueue operation");
 		}
 	}
 
@@ -646,7 +654,7 @@ public class Peripheral extends BluetoothGattCallback {
 	}
 
 	public void read(UUID serviceUUID, UUID characteristicUUID, final Callback callback) {
-		enqueue(() -> {
+		if (!enqueue(() -> {
 			if (!isConnected() || gatt == null) {
 				callback.invoke("Device is not connected", null);
 				completedCommand();
@@ -669,7 +677,9 @@ public class Peripheral extends BluetoothGattCallback {
 				completedCommand();
 			}
 
-		});
+		})) {
+			callback.invoke("Internal error: failed to enqueue operation");
+		}
 	}
 
 	private byte[] copyOf(byte[] source) {
@@ -709,14 +719,6 @@ public class Peripheral extends BluetoothGattCallback {
 				return;
 			}
 
-			// Check if we still have a valid gatt object
-			if (gatt == null) {
-				Log.d(BleManager.LOG_TAG, "Error, gatt is null");
-				commandQueue.clear();
-				commandQueueBusy = false;
-				return;
-			}
-
 			// Execute the next command in the queue
 			commandQueueBusy = true;
 			mainHandler.post(new Runnable() {
@@ -753,12 +755,18 @@ public class Peripheral extends BluetoothGattCallback {
 			}
 		})) {
 			Log.d(BleManager.LOG_TAG, "Could not queue readRemoteRssi command");
+			callback.invoke("Internal error: failed to enqueue operation");
 		}
 	}
 
 	public void refreshCache(Callback callback) {
-		enqueue(() -> {
+		if (!enqueue(() -> {
 			try {
+				if (gatt == null) {
+					callback.invoke("BluetoothGatt is null");
+					connectCallback = null;
+					completedCommand();
+				}
 				Method localMethod = gatt.getClass().getMethod("refresh", new Class[0]);
 				if (localMethod != null) {
 					boolean res = ((Boolean) localMethod.invoke(gatt, new Object[0])).booleanValue();
@@ -772,11 +780,13 @@ public class Peripheral extends BluetoothGattCallback {
 			} finally {
 				completedCommand();
 			}
-		});
+		})) {
+			callback.invoke("Internal error: failed to enqueue operation");
+		}
 	}
 
 	public void retrieveServices(Callback callback) {
-		enqueue(() -> {
+		if (!enqueue(() -> {
 			if (!isConnected()) {
 				callback.invoke("Device is not connected", null);
 				completedCommand();
@@ -789,7 +799,9 @@ public class Peripheral extends BluetoothGattCallback {
 				this.retrieveServicesCallback = callback;
 				gatt.discoverServices();
 			}
-		});
+		})) {
+			callback.invoke("Internal error: failed to enqueue operation");
+		}
 	}
 
 	// Some peripherals re-use UUIDs for multiple characteristics so we need to
@@ -828,6 +840,13 @@ public class Peripheral extends BluetoothGattCallback {
 					writeCallback = callback;
 				else
 					writeCallback = null;
+
+				if (gatt == null) {
+					writeCallback.invoke("Write failed: gatt is null");
+					writeCallback = null;
+					completedCommand();
+				}
+
 				if (!gatt.writeCharacteristic(characteristic)) {
 					// write without response, caller will handle the callback
 					if (writeCallback != null) {
@@ -841,7 +860,7 @@ public class Peripheral extends BluetoothGattCallback {
 	}
 
 	public void write(UUID serviceUUID, UUID characteristicUUID, byte[] data, Integer maxByteSize, Integer queueSleepTime, Callback callback, int writeType) {
-		enqueue(() -> {
+		if (!enqueue(() -> {
 			if (!isConnected() || gatt == null) {
 				callback.invoke("Device is not connected", null);
 				completedCommand();
@@ -922,11 +941,13 @@ public class Peripheral extends BluetoothGattCallback {
 			}
 
 			completedCommand();
-		});
+		})) {
+			callback.invoke("Internal error: failed to enqueue operation");
+		}
 	}
 
 	public void requestConnectionPriority(int connectionPriority, Callback callback) {
-		enqueue(() -> {
+		if (!enqueue(() -> {
 			if (gatt != null) {
 				if (Build.VERSION.SDK_INT >= LOLLIPOP) {
 					boolean status = gatt.requestConnectionPriority(connectionPriority);
@@ -939,11 +960,13 @@ public class Peripheral extends BluetoothGattCallback {
 			}
 
 			completedCommand();
-		});
+		})) {
+			callback.invoke("Internal error: failed to enqueue operation");
+		}
 	}
 
 	public void requestMTU(int mtu, Callback callback) {
-		enqueue(() -> {
+		if (!enqueue(() -> {
 			if (!isConnected()) {
 				callback.invoke("Device is not connected", null);
 				completedCommand();
@@ -967,7 +990,9 @@ public class Peripheral extends BluetoothGattCallback {
 				callback.invoke("Requesting MTU requires at least API level 21", null);
 				completedCommand();
 			}
-		});
+		})) {
+			callback.invoke("Internal error: failed to enqueue operation");
+		}
 	}
 
 	@Override
