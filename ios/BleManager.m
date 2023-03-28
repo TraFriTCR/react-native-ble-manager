@@ -257,14 +257,17 @@ bool hasListeners;
 
 -(void) completedCommand
 {
-    [commandQueue removeObjectAtIndex:0];
-    commandQueueBusy = false;
-    [self nextCommand];
+    @synchronized(commandQueue)
+    {
+        [commandQueue removeObjectAtIndex:0];
+        commandQueueBusy = false;
+        [self nextCommand];
+    }
 }
 
 -(void) nextCommand
 {
-    @synchronized(self) {
+    @synchronized(commandQueue) {
         if (commandQueueBusy) {
             NSLog(@"Commmand queue busy");
             return;
@@ -286,8 +289,8 @@ bool hasListeners;
 {
     @synchronized(commandQueue) {
         [commandQueue addObject:command];
+        [self nextCommand];
     }
-    [self nextCommand];
 }
 
 RCT_EXPORT_METHOD(getDiscoveredPeripherals:(nonnull RCTResponseSenderBlock)callback)
