@@ -789,8 +789,8 @@ public class Peripheral extends BluetoothGattCallback {
 			try {
 				if (gatt == null) {
 					callback.invoke("BluetoothGatt is null");
-					connectCallback = null;
 					completedCommand();
+					return;
 				}
 				Method localMethod = gatt.getClass().getMethod("refresh", new Class[0]);
 				if (localMethod != null) {
@@ -870,6 +870,7 @@ public class Peripheral extends BluetoothGattCallback {
 					writeCallback.invoke("Write failed: gatt is null");
 					writeCallback = null;
 					completedCommand();
+					return;
 				}
 
 				if (!gatt.writeCharacteristic(characteristic)) {
