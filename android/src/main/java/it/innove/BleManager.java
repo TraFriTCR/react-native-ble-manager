@@ -30,11 +30,13 @@ import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.modules.core.RCTNativeAppEventEmitter;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 
 import static android.app.Activity.RESULT_OK;
 import static android.bluetooth.BluetoothProfile.GATT;
@@ -96,6 +98,18 @@ class BleManager extends ReactContextBaseJavaModule {
     // key is the MAC Address
     private final Map<String, Peripheral> peripherals = new LinkedHashMap<>();
     // scan session id
+
+    // wrapper to use completable future as a callback
+    private class CompletableFutureCallback implements Callback {
+        private CompletableFuture<Object[]> future;
+        CompletableFutureCallback(CompletableFuture<Object[]> future) {
+            this.future = future;
+        }
+        @Override
+        public void invoke(Object... args) {
+            this.future.complete(args);
+        }
+    }
 
     public BleManager(ReactApplicationContext reactContext) {
         super(reactContext);
@@ -429,7 +443,7 @@ class BleManager extends ReactContextBaseJavaModule {
             callback.invoke("Peripheral not found", null);
     }
 
-    private Peripheral savePeripheral(BluetoothDevice device) {
+    private CompletableFuture<Peripheral> saveConnectedPeripheral(final BluetoothDevice device) {
         String address = device.getAddress();
         synchronized (peripherals) {
             if (!peripherals.containsKey(address)) {
@@ -442,7 +456,19 @@ class BleManager extends ReactContextBaseJavaModule {
                 peripherals.put(device.getAddress(), peripheral);
             }
         }
-        return peripherals.get(address);
+        CompletableFuture<Object[]> future = new CompletableFuture();
+        Callback callback = new CompletableFutureCallback(future);
+        final Peripheral peripheral = peripherals.get(address);
+        peripheral.connect(callback, getCurrentActivity());
+        return future.thenComposeAsync((Object... args) -> {
+            if (args.length == 0 || args[0] == null) {
+                return CompletableFuture.completedFuture(peripheral);
+            } else {
+                CompletableFuture<Peripheral> failedFuture = new CompletableFuture<>();
+                failedFuture.completeExceptionally(new Exception((String)args[0]));
+                return failedFuture;
+            }
+        });
     }
 
     public Peripheral getPeripheral(BluetoothDevice device) {
@@ -622,12 +648,27 @@ class BleManager extends ReactContextBaseJavaModule {
         }
 
         List<BluetoothDevice> periperals = getBluetoothManager().getConnectedDevices(GATT);
+        ArrayList<CompletableFuture<Peripheral>> futures = new ArrayList();
         for (BluetoothDevice entry : periperals) {
-            Peripheral peripheral = savePeripheral(entry);
-            WritableMap jsonBundle = peripheral.asWritableMap();
-            map.pushMap(jsonBundle);
+            futures.add(saveConnectedPeripheral(entry));
         }
-        callback.invoke(null, map);
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture<?>[0])).handle((v, e) -> {
+            if (e != null) {
+                callback.invoke("Internal error: Failed to connect with a device which should have been connected: " + e);
+                return v;
+            }
+            try {
+                for (CompletableFuture<Peripheral> future : futures) {
+                    Peripheral peripheral = future.get();
+                    WritableMap jsonBundle = peripheral.asWritableMap();
+                    map.pushMap(jsonBundle);
+                }
+                callback.invoke(null, map);
+            } catch (Exception ex) {
+                callback.invoke("Internal error: Failed to get device map: " + ex);
+            }
+            return v;
+        });
     }
 
     @ReactMethod
