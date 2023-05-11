@@ -14,6 +14,7 @@
     RCTResponseSenderBlock notificationCallback;
     NSString *notificationCallbackKey;
     NSMutableSet *retrieveServicesLatch;
+    NSNumber *isBluetoothEnabled;
 }
 
 @property (strong, nonatomic) NSMutableSet *peripherals;
