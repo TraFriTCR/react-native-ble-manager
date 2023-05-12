@@ -1,12 +1,14 @@
 package it.innove;
 
 import android.app.Activity;
+import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCallback;
 import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothGattDescriptor;
 import android.bluetooth.BluetoothGattService;
+import android.bluetooth.BluetoothManager;
 import android.bluetooth.BluetoothProfile;
 import android.content.Context;
 import android.os.Build;
@@ -55,6 +57,7 @@ public class Peripheral extends BluetoothGattCallback {
 	private volatile boolean connected = false;
 	private volatile boolean connecting = false;
 	private ReactContext reactContext;
+	private BluetoothAdapter bluetoothAdapter;
 
 	private BluetoothGatt gatt;
 
@@ -79,12 +82,16 @@ public class Peripheral extends BluetoothGattCallback {
 		this.advertisingRSSI = advertisingRSSI;
 		this.advertisingDataBytes = scanRecord;
 		this.reactContext = reactContext;
+		BluetoothManager manager = (BluetoothManager) reactContext.getSystemService(Context.BLUETOOTH_SERVICE);
+		this.bluetoothAdapter = manager.getAdapter();
 	}
 
 	public Peripheral(BluetoothDevice device, ReactContext reactContext) {
 		this.device = device;
 		this.bufferedCharacteristics = new ConcurrentHashMap<String, NotifyBufferContainer>();
 		this.reactContext = reactContext;
+		BluetoothManager manager = (BluetoothManager) reactContext.getSystemService(Context.BLUETOOTH_SERVICE);
+		this.bluetoothAdapter = manager.getAdapter();
 	}
 
 	private void sendEvent(String eventName, @Nullable WritableMap params) {
@@ -105,6 +112,11 @@ public class Peripheral extends BluetoothGattCallback {
 
 	public void connect(final Callback callback, Activity activity) {
 		if (!enqueue(() -> {
+			if (BleManager.handledInvalidState(bluetoothAdapter, callback)) {
+				completedCommand();
+				return;
+			}
+
 			if (!connected) {
 				BluetoothDevice device = getDevice();
 				this.connectCallback = callback;
@@ -146,29 +158,28 @@ public class Peripheral extends BluetoothGattCallback {
 
 	public void disconnect(final Callback callback, final boolean force) {
 		mainHandler.post(() -> {
-			connectCallback = null;
-			connected = false;
-			clearBuffers();
-			commandQueue.clear();
-			commandQueueBusy = false;
+			if (BleManager.handledInvalidState(bluetoothAdapter, callback)) return;
 
-			if (gatt != null) {
-				try {
-					gatt.disconnect();
-					if (force) {
-						gatt.close();
-						gatt = null;
-						sendConnectionEvent(device, "BleManagerDisconnectPeripheral", BluetoothGatt.GATT_SUCCESS);
-					}
-					Log.d(BleManager.LOG_TAG, "Disconnect");
-				} catch (Exception e) {
-					sendConnectionEvent(device, "BleManagerDisconnectPeripheral", BluetoothGatt.GATT_FAILURE);
-					Log.d(BleManager.LOG_TAG, "Error on disconnect", e);
-				}
-			} else
+			// gatt is already null
+			if (gatt == null) {
 				Log.d(BleManager.LOG_TAG, "GATT is null");
-			if (callback != null)
 				callback.invoke();
+			}
+
+			// attempt disconnect
+			try {
+				if (force) {
+					handleDisconnect();
+				} else {
+					gatt.disconnect();
+				}
+				Log.d(BleManager.LOG_TAG, "Disconnect");
+			} catch (Exception e) {
+				sendConnectionEvent(device, "BleManagerDisconnectPeripheral", BluetoothGatt.GATT_FAILURE);
+				Log.d(BleManager.LOG_TAG, "Error on disconnect", e);
+			} finally {
+				callback.invoke();
+			}
 		});
 	}
 
@@ -301,6 +312,60 @@ public class Peripheral extends BluetoothGattCallback {
 		return device;
 	}
 
+	public void handleExternalDisconnect() {
+		mainHandler.post(() -> {
+			handleDisconnect();
+		});
+	}
+	
+	private void handleDisconnect() {
+		if (discoverServicesRunnable != null) {
+			mainHandler.removeCallbacks(discoverServicesRunnable);
+			discoverServicesRunnable = null;
+		}
+
+		boolean canceledCommand = false;
+
+		List<Callback> callbacks = Arrays.asList(connectCallback, writeCallback, retrieveServicesCallback, readRSSICallback,
+				readCallback, registerNotifyCallback, requestMTUCallback);
+		for (Callback currentCallback : callbacks) {
+			if (currentCallback != null) {
+				try {
+					currentCallback.invoke("Device disconnected");
+				} catch (Exception e) {
+					e.printStackTrace();
+				} finally {
+					canceledCommand = true;
+				}
+			}
+		}
+
+		writeCallback = null;
+		readCallback = null;
+		retrieveServicesCallback = null;
+		readRSSICallback = null;
+		registerNotifyCallback = null;
+		requestMTUCallback = null;
+		connectCallback = null;
+
+		writeQueue.clear();
+		clearBuffers();
+
+		if (gatt != null) {
+			gatt.disconnect();
+			gatt.close();
+			gatt = null;
+		}
+
+		connected = false;
+
+		sendConnectionEvent(device, "BleManagerDisconnectPeripheral", BluetoothGatt.GATT_SUCCESS);
+
+		if (canceledCommand) {
+			completedCommand();
+		}
+	}
+
 	@Override
 	public void onServicesDiscovered(BluetoothGatt gatt, int status) {
 		super.onServicesDiscovered(gatt, status);
@@ -354,45 +419,9 @@ public class Peripheral extends BluetoothGattCallback {
 
 			} else if (newState == BluetoothProfile.STATE_DISCONNECTED || status != BluetoothGatt.GATT_SUCCESS) {
 
-				if (discoverServicesRunnable != null) {
-					mainHandler.removeCallbacks(discoverServicesRunnable);
-					discoverServicesRunnable = null;
+				if (connected) {
+					handleDisconnect();;
 				}
-
-				List<Callback> callbacks = Arrays.asList(writeCallback, retrieveServicesCallback, readRSSICallback,
-						readCallback, registerNotifyCallback, requestMTUCallback);
-				for (Callback currentCallback : callbacks) {
-					if (currentCallback != null) {
-						try {
-							currentCallback.invoke("Device disconnected");
-						} catch (Exception e) {
-							e.printStackTrace();
-						}				}
-				}
-				if (connectCallback != null) {
-					connectCallback.invoke("Connection error");
-					connectCallback = null;
-					completedCommand();
-				}
-				writeCallback = null;
-				writeQueue.clear();
-				readCallback = null;
-				retrieveServicesCallback = null;
-				readRSSICallback = null;
-				registerNotifyCallback = null;
-				requestMTUCallback = null;
-				commandQueue.clear();
-				commandQueueBusy = false;
-				connectCallback = null;
-				connected = false;
-				clearBuffers();
-				commandQueue.clear();
-				commandQueueBusy = false;
-
-				gatt.disconnect();
-				gatt.close();
-				gatt = null;
-				sendConnectionEvent(device, "BleManagerDisconnectPeripheral", BluetoothGatt.GATT_SUCCESS);
 
 			}
 
@@ -615,6 +644,10 @@ public class Peripheral extends BluetoothGattCallback {
 
 	public void registerNotify(UUID serviceUUID, UUID characteristicUUID, Integer buffer, Callback callback) {
 		if (!enqueue(() -> {
+			if (BleManager.handledInvalidState(bluetoothAdapter, callback)) {
+				completedCommand();
+				return;
+			}
 			Log.d(BleManager.LOG_TAG, "registerNotify");
 			if (buffer > 1) {
 				Log.d(BleManager.LOG_TAG, "registerNotify using buffer");
@@ -630,6 +663,10 @@ public class Peripheral extends BluetoothGattCallback {
 
 	public void removeNotify(UUID serviceUUID, UUID characteristicUUID, Callback callback) {
 		if (!enqueue(() -> {
+			if (BleManager.handledInvalidState(bluetoothAdapter, callback)) {
+				completedCommand();
+				return;
+			}
 			Log.d(BleManager.LOG_TAG, "removeNotify");
 			String bufferKey = this.bufferedCharacteristicsKey(serviceUUID.toString(), characteristicUUID.toString());
 			if (this.bufferedCharacteristics.containsKey(bufferKey)) {
@@ -680,6 +717,11 @@ public class Peripheral extends BluetoothGattCallback {
 
 	public void read(UUID serviceUUID, UUID characteristicUUID, final Callback callback) {
 		if (!enqueue(() -> {
+			if (BleManager.handledInvalidState(bluetoothAdapter, callback)) {
+				completedCommand();
+				return;
+			}
+
 			if (!isConnected() || gatt == null) {
 				callback.invoke("Device is not connected", null);
 				completedCommand();
@@ -762,7 +804,10 @@ public class Peripheral extends BluetoothGattCallback {
 
 	public void readRSSI(final Callback callback) {
 		if (!enqueue(() -> {
-			if (!isConnected()) {
+			if (BleManager.handledInvalidState(bluetoothAdapter, callback)) {
+				completedCommand();
+				return;
+			} else if (!isConnected()) {
 				callback.invoke("Device is not connected", null);
 				completedCommand();
 				return;
@@ -787,6 +832,10 @@ public class Peripheral extends BluetoothGattCallback {
 	public void refreshCache(Callback callback) {
 		if (!enqueue(() -> {
 			try {
+				if (BleManager.handledInvalidState(bluetoothAdapter, callback)) {
+					completedCommand();
+					return;
+				}
 				if (gatt == null) {
 					callback.invoke("BluetoothGatt is null");
 					completedCommand();
@@ -812,7 +861,10 @@ public class Peripheral extends BluetoothGattCallback {
 
 	public void retrieveServices(Callback callback) {
 		if (!enqueue(() -> {
-			if (!isConnected()) {
+			if (BleManager.handledInvalidState(bluetoothAdapter, callback)) {
+				completedCommand();
+				return;
+			} else if (!isConnected()) {
 				callback.invoke("Device is not connected", null);
 				completedCommand();
 				return;
@@ -887,6 +939,11 @@ public class Peripheral extends BluetoothGattCallback {
 
 	public void write(UUID serviceUUID, UUID characteristicUUID, byte[] data, Integer maxByteSize, Integer queueSleepTime, Callback callback, int writeType) {
 		if (!enqueue(() -> {
+			if (BleManager.handledInvalidState(bluetoothAdapter, callback)) {
+				completedCommand();
+				return;
+			}
+
 			if (!isConnected() || gatt == null) {
 				callback.invoke("Device is not connected", null);
 				completedCommand();
@@ -974,6 +1031,10 @@ public class Peripheral extends BluetoothGattCallback {
 
 	public void requestConnectionPriority(int connectionPriority, Callback callback) {
 		if (!enqueue(() -> {
+			if (BleManager.handledInvalidState(bluetoothAdapter, callback)) {
+				completedCommand();
+				return;
+			}
 			if (gatt != null) {
 				if (Build.VERSION.SDK_INT >= LOLLIPOP) {
 					boolean status = gatt.requestConnectionPriority(connectionPriority);
@@ -993,6 +1054,11 @@ public class Peripheral extends BluetoothGattCallback {
 
 	public void requestMTU(int mtu, Callback callback) {
 		if (!enqueue(() -> {
+			if (BleManager.handledInvalidState(bluetoothAdapter, callback)) {
+				completedCommand();
+				return;
+			}
+
 			if (!isConnected()) {
 				callback.invoke("Device is not connected", null);
 				completedCommand();
