@@ -297,6 +297,18 @@ class BleManager {
     });
   }
 
+  isBluetoothEnabled() {
+    return new Promise((fulfill, reject) => {
+      bleManager.isBluetoothEnabled((error, enabled) => {
+        if (error != null) {
+          reject(error);
+        } else {
+          fulfill(enabled);
+        }
+      });
+    });
+  };
+
   enableBluetooth() {
     return new Promise((fulfill, reject) => {
       bleManager.enableBluetooth(error => {
