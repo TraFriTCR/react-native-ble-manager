@@ -261,6 +261,7 @@ bool hasListeners;
     @synchronized(commandQueue)
     {
         [commandQueue removeObjectAtIndex:0];
+        currentDeviceUUID = @"";
         commandQueueBusy = false;
         [self nextCommand];
     }
@@ -491,6 +492,7 @@ RCT_EXPORT_METHOD(connect:(NSString *)peripheralUUID callback:(nonnull RCTRespon
             [self completedCommand];
             return;
         }
+        currentDeviceUUID = [NSString stringWithString:peripheralUUID];
         
         CBPeripheral *peripheral = [self findPeripheralByUUID:peripheralUUID];
         if (peripheral == nil) {
@@ -589,6 +591,7 @@ RCT_EXPORT_METHOD(write:(NSString *)deviceUUID serviceUUID:(NSString*)serviceUUI
             [self completedCommand];
             return;
         }
+        currentDeviceUUID = [NSString stringWithString:deviceUUID];
         
         BLECommandContext *context = [self getData:deviceUUID serviceUUIDString:serviceUUID characteristicUUIDString:characteristicUUID prop:CBCharacteristicPropertyWrite callback:callback];
         
@@ -700,6 +703,7 @@ RCT_EXPORT_METHOD(read:(NSString *)deviceUUID serviceUUID:(NSString*)serviceUUID
             [self completedCommand];
             return;
         }
+        currentDeviceUUID = [NSString stringWithString:deviceUUID];
         
         BLECommandContext *context = [self getData:deviceUUID serviceUUIDString:serviceUUID characteristicUUIDString:characteristicUUID prop:CBCharacteristicPropertyRead callback:callback];
         if (context) {
@@ -727,6 +731,7 @@ RCT_EXPORT_METHOD(readRSSI:(NSString *)deviceUUID callback:(nonnull RCTResponseS
             [self completedCommand];
             return;
         }
+        currentDeviceUUID = [NSString stringWithString:deviceUUID];
         
         CBPeripheral *peripheral = [self findPeripheralByUUID:deviceUUID];
         
@@ -749,6 +754,7 @@ RCT_EXPORT_METHOD(retrieveServices:(NSString *)deviceUUID services:(NSArray<NSSt
             [self completedCommand];
             return;
         }
+        currentDeviceUUID = [NSString stringWithString:deviceUUID];
         
         CBPeripheral *peripheral = [self findPeripheralByUUID:deviceUUID];
         
@@ -783,6 +789,7 @@ RCT_EXPORT_METHOD(startNotification:(NSString *)deviceUUID serviceUUID:(NSString
             [self completedCommand];
             return;
         }
+        currentDeviceUUID = [NSString stringWithString:deviceUUID];
         
         BLECommandContext *context = [self getData:deviceUUID serviceUUIDString:serviceUUID characteristicUUIDString:characteristicUUID prop:CBCharacteristicPropertyNotify callback:callback];
         
@@ -810,6 +817,7 @@ RCT_EXPORT_METHOD(stopNotification:(NSString *)deviceUUID serviceUUID:(NSString*
             [self completedCommand];
             return;
         }
+        currentDeviceUUID = [NSString stringWithString:deviceUUID];
         
         BLECommandContext *context = [self getData:deviceUUID serviceUUIDString:serviceUUID characteristicUUIDString:characteristicUUID prop:CBCharacteristicPropertyNotify callback:callback];
         
@@ -836,6 +844,11 @@ RCT_EXPORT_METHOD(stopNotification:(NSString *)deviceUUID serviceUUID:(NSString*
     }];
     
 }
+
+RCT_EXPORT_METHOD(isBluetoothEnabled:(nonnull RCTResponseSenderBlock)callback)
+{
+  callback(@[[NSNull null], isBluetoothEnabled]);
+};
 
 RCT_EXPORT_METHOD(enableBluetooth:(nonnull RCTResponseSenderBlock)callback)
 {
@@ -935,7 +948,7 @@ RCT_EXPORT_METHOD(requestMTU:(NSString *)deviceUUID mtu:(NSInteger)mtu callback:
 
 }
 
-- (void)cancelAllCommands:(NSString*) errorStr
+- (void)cancelCurrentCommand:(NSString*) errorStr
 {
     bool canceledCommand = false;
 
@@ -992,7 +1005,10 @@ RCT_EXPORT_METHOD(requestMTU:(NSString *)deviceUUID mtu:(NSInteger)mtu callback:
            
         NSString *errorStr = [NSString stringWithFormat:@"Peripheral did disconnect: %@", peripheralUUIDString];
         
-        [self cancelAllCommands:errorStr];
+        if ([peripheralUUIDString isEqualToString:currentDeviceUUID]) {
+            // only cancel if command is associated with the disconnected device
+            [self cancelCurrentCommand:errorStr];
+        }
         
         if (hasListeners) {
             if (error) {
@@ -1107,7 +1123,7 @@ RCT_EXPORT_METHOD(requestMTU:(NSString *)deviceUUID mtu:(NSInteger)mtu callback:
         }
         // Invoke all callbacks to handle in-flight commands
         NSString *errorStr = @"Bluetooth has been disabled!";
-        [self cancelAllCommands:errorStr];
+        [self cancelCurrentCommand:errorStr];
     });
 }
 

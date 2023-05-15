@@ -216,6 +216,19 @@ BleManager.disconnect("XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX")
   });
 ```
 
+### isBluetoothEnabled()
+
+Check if bluetooth is enabled
+Returns a `Promise<boolean>` object.
+
+**Examples**
+```js
+BleManager.isBluetoothEnabled()
+  .then(result => {
+    // true if bluetooth is enabled
+  });
+```
+
 ### enableBluetooth() [Android only]
 
 Create the request to the user to activate the bluetooth.

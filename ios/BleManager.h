@@ -15,6 +15,7 @@
     NSString *notificationCallbackKey;
     NSMutableSet *retrieveServicesLatch;
     NSNumber *isBluetoothEnabled;
+    NSString *currentDeviceUUID;
 }
 
 @property (strong, nonatomic) NSMutableSet *peripherals;
