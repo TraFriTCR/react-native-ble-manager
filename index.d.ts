@@ -107,6 +107,7 @@ declare module "react-native-ble-manager" {
     peripheralID: string,
     connectionPriority: ConnectionPriority
   ): Promise<void>;
+  export function isBluetoothEnabled(): Promise<boolean>;
   /// Android only
   export function enableBluetooth(): Promise<void>;
   // [Android only]

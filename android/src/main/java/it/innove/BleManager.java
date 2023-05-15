@@ -173,6 +173,15 @@ class BleManager extends ReactContextBaseJavaModule {
     }
 
     @ReactMethod
+    public void isBluetoothEnabled(Callback callback) {
+        if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled()) {
+          callback.invoke(null, false);
+        } else {
+          callback.invoke(null, true);
+        }
+    }
+
+    @ReactMethod
     public void enableBluetooth(Callback callback) {
         if (getBluetoothAdapter() == null) {
             Log.d(LOG_TAG, "No bluetooth support");
