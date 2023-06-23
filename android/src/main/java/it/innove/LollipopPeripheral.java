@@ -5,6 +5,8 @@ import android.bluetooth.le.ScanRecord;
 import android.bluetooth.le.ScanResult;
 import android.os.Build;
 import android.os.ParcelUuid;
+import android.util.SparseArray;
+
 import androidx.annotation.RequiresApi;
 
 import com.facebook.react.bridge.Arguments;
@@ -37,18 +39,31 @@ public class LollipopPeripheral extends Peripheral {
 		WritableMap advertising = Arguments.createMap();
 
 		try {
-			advertising.putMap("manufacturerData", byteArrayToWritableMap(advertisingDataBytes));
+			WritableArray manufacturerDataArray = Arguments.createArray();
+			SparseArray<byte[]> manufacturerDataMapSparse = advertisingData.getManufacturerSpecificData();
+			for (int i = 0; i < manufacturerDataMapSparse.size(); i++) {
+				int manufacturerID = manufacturerDataMapSparse.keyAt(i);
+				byte[] manufacturerDataBytes = manufacturerDataMapSparse.valueAt(i);
+				WritableArray manufacturerData = Arguments.createArray();
+				for (byte b : manufacturerDataBytes) {
+					manufacturerData.pushInt(b);
+				}
+				WritableMap manufacturerDataMap = Arguments.createMap();
+				manufacturerDataMap.putInt("CompanyID", manufacturerID);
+				manufacturerDataMap.putArray("Data", manufacturerData);
+				manufacturerDataArray.pushMap(manufacturerDataMap);
+			}
+			advertising.putArray("manufacturerData", manufacturerDataArray);
 
-			if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.O){
+			if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
 				// We can check if peripheral is connectable using the scanresult
 				if (this.scanResult != null) {
 					advertising.putBoolean("isConnectable", scanResult.isConnectable());
 				}
-			} else{
+			} else {
 				// We can't check if peripheral is connectable
 				advertising.putBoolean("isConnectable", true);
 			}
-
 
 			if (advertisingData != null) {
 				String deviceName = advertisingData.getDeviceName();
