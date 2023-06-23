@@ -192,37 +192,6 @@ public class Peripheral extends BluetoothGattCallback {
 			map.putString("id", device.getAddress()); // mac address
 			map.putInt("rssi", advertisingRSSI);
 
-			String name = device.getName();
-			if (name != null)
-				advertising.putString("localName", name);
-
-			byte[] advertisedData = Arrays.copyOf(advertisingDataBytes, advertisingDataBytes.length);
-			int offset = 0;
-			while (offset < (advertisedData.length - 2)) {
-				int len = advertisedData[offset++];
-				if (len == 0)
-					break;
-
-				int type = advertisedData[offset++];
-				switch (type & 0xff) {
-					case 0xff:
-						int i = 0;
-						byte[] mData = new byte[len];
-						while (len > 1) {
-							if (i < 32) {
-								mData[i++] = advertisedData[offset++];
-							}
-							len -= 1;
-						}
-						advertising.putMap("manufacturerData", byteArrayToWritableMap(mData));
-						break;
-
-					default:
-						offset += (len - 1);
-						break;
-				}
-			}
-
 			// No scanResult to access so we can't check if peripheral is connectable
 			advertising.putBoolean("isConnectable", true);
 
