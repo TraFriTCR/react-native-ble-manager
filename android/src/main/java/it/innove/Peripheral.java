@@ -388,9 +388,7 @@ public class Peripheral extends BluetoothGattCallback {
 
 			} else if (newState == BluetoothProfile.STATE_DISCONNECTED || status != BluetoothGatt.GATT_SUCCESS) {
 
-				if (connected) {
-					handleDisconnect();;
-				}
+				handleDisconnect();
 
 			}
 
