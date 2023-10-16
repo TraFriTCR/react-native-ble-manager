@@ -164,6 +164,7 @@ public class Peripheral extends BluetoothGattCallback {
 			if (gatt == null) {
 				Log.d(BleManager.LOG_TAG, "GATT is null");
 				callback.invoke();
+				return;
 			}
 
 			// attempt disconnect
