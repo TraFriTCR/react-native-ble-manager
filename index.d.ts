@@ -6,11 +6,18 @@ declare module "react-native-ble-manager" {
     advertising: AdvertisingData;
   }
 
+  export interface WritableMap {
+    CDVType: string,
+    data: string,
+    bytes: number[],
+  }
+
   export interface AdvertisingData {
     isConnectable?: boolean;
     localName?: string;
-    manufacturerData?: any;
+    manufacturerData?: WritableMap;
     serviceUUIDs?: string[];
+    serviceData?: {[key: string]: WritableMap};
     txPowerLevel?: number;
   }
 
