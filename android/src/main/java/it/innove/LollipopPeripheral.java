@@ -5,6 +5,7 @@ import android.bluetooth.le.ScanRecord;
 import android.bluetooth.le.ScanResult;
 import android.os.Build;
 import android.os.ParcelUuid;
+import android.util.Log;
 import android.util.SparseArray;
 
 import androidx.annotation.RequiresApi;
@@ -39,56 +40,68 @@ public class LollipopPeripheral extends Peripheral {
 		WritableMap advertising = Arguments.createMap();
 
 		try {
-			WritableArray manufacturerDataArray = Arguments.createArray();
-			SparseArray<byte[]> manufacturerDataMapSparse = advertisingData.getManufacturerSpecificData();
-			for (int i = 0; i < manufacturerDataMapSparse.size(); i++) {
-				int manufacturerID = manufacturerDataMapSparse.keyAt(i);
-				byte[] manufacturerDataBytes = manufacturerDataMapSparse.valueAt(i);
-				WritableArray manufacturerData = Arguments.createArray();
-				for (byte b : manufacturerDataBytes) {
-					manufacturerData.pushInt(b);
-				}
-				WritableMap manufacturerDataMap = Arguments.createMap();
-				manufacturerDataMap.putInt("CompanyID", manufacturerID);
-				manufacturerDataMap.putArray("Data", manufacturerData);
-				manufacturerDataArray.pushMap(manufacturerDataMap);
-			}
-			advertising.putArray("manufacturerData", manufacturerDataArray);
-
-			if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-				// We can check if peripheral is connectable using the scanresult
-				if (this.scanResult != null) {
-					advertising.putBoolean("isConnectable", scanResult.isConnectable());
-				}
-			} else {
-				// We can't check if peripheral is connectable
-				advertising.putBoolean("isConnectable", true);
-			}
 
 			if (advertisingData != null) {
-				String deviceName = advertisingData.getDeviceName();
-				if (deviceName != null)
-					advertising.putString("localName", deviceName.replace("\0", ""));
 
-				WritableArray serviceUuids = Arguments.createArray();
-				if (advertisingData.getServiceUuids() != null && advertisingData.getServiceUuids().size() != 0) {
-					for (ParcelUuid uuid : advertisingData.getServiceUuids()) {
-						serviceUuids.pushString(UUIDHelper.uuidToString(uuid.getUuid()));
+				// localName
+				String deviceName = advertisingData.getDeviceName();
+				if (deviceName != null) {
+					advertising.putString("localName", deviceName.replace("\0", ""));
+				}
+
+				// isConnectable
+				if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+					// We can check if peripheral is connectable using the scanresult
+					if (this.scanResult != null) {
+						advertising.putBoolean("isConnectable", scanResult.isConnectable());
 					}
 				}
-				advertising.putArray("serviceUUIDs", serviceUuids);
 
-				WritableMap serviceData = Arguments.createMap();
-				if (advertisingData.getServiceData() != null) {
+				// txPowerLevel
+				int txPowerLevel = advertisingData.getTxPowerLevel();
+				if (txPowerLevel > 0) {
+					advertising.putInt("txPowerLevel", txPowerLevel);
+				}
+
+				// serviceData
+				if (advertisingData.getServiceData() != null && advertisingData.getServiceData().size() != 0) {
+					WritableMap serviceData = Arguments.createMap();
 					for (Map.Entry<ParcelUuid, byte[]> entry : advertisingData.getServiceData().entrySet()) {
 						if (entry.getValue() != null) {
 							serviceData.putMap(UUIDHelper.uuidToString((entry.getKey()).getUuid()), byteArrayToWritableMap(entry.getValue()));
 						}
 					}
+					advertising.putMap("serviceData", serviceData);
 				}
 
-                advertising.putMap("serviceData", serviceData);
-				advertising.putInt("txPowerLevel", advertisingData.getTxPowerLevel());
+				// serviceUUIDs
+				if (advertisingData.getServiceUuids() != null && advertisingData.getServiceUuids().size() != 0) {
+					WritableArray serviceUuids = Arguments.createArray();
+					for (ParcelUuid uuid : advertisingData.getServiceUuids()) {
+						serviceUuids.pushString(UUIDHelper.uuidToString(uuid.getUuid()));
+					}
+					advertising.putArray("serviceUUIDs", serviceUuids);
+				}
+;
+				// manufacturerData
+				if (advertisingData.getManufacturerSpecificData() != null && advertisingData.getManufacturerSpecificData().size() != 0) {
+					WritableMap manufacturerDataArray = Arguments.createMap();
+					SparseArray<byte[]> manufacturerDataMapSparse = advertisingData.getManufacturerSpecificData();
+					if (manufacturerDataMapSparse.size() > 1) {
+						Log.e(BleManager.LOG_TAG, "Found manufacturing data that has length greater than 1!");
+					}
+
+					int manufacturerID = manufacturerDataMapSparse.keyAt(0);
+					byte[] manufacturerDataBytes = manufacturerDataMapSparse.valueAt(0);
+
+					byte[] result = new byte[manufacturerDataBytes.length + 2];
+					result[1] = (byte) (manufacturerID >> 8);
+					result[0] = (byte) (manufacturerID);
+					System.arraycopy(manufacturerDataBytes, 0, result, 2, manufacturerDataBytes.length);
+
+					advertising.putMap("manufacturerData", byteArrayToWritableMap(result));
+				}
+
 			}
 
 			map.putMap("advertising", advertising);
