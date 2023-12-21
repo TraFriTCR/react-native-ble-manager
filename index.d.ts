@@ -142,20 +142,22 @@ declare module "react-native-ble-manager" {
     uuid: string;
   }
 
+  export enum CharacteristicProperty {
+   Broadcast = "Broadcast",
+   Read = "Read",
+   WriteWithoutResponse = "WriteWithoutResponse",
+   Write = "Write",
+   Notify = "Notify",
+   Indicate = "Indicate",
+   AuthenticatedSignedWrites = "AuthenticatedSignedWrites",
+   ExtendedProperties = "ExtendedProperties",
+   NotifyEncryptionRequired = "NotifyEncryptionRequired",
+   IndicateEncryptionRequired = "IndicateEncryptionRequired",
+  }
+
   export interface Characteristic {
     // See https://developer.apple.com/documentation/corebluetooth/cbcharacteristicproperties
-    properties: {
-      Broadcast?: "Broadcast";
-      Read?: "Read";
-      WriteWithoutResponse?: "WriteWithoutResponse";
-      Write?: "Write";
-      Notify?: "Notify";
-      Indicate?: "Indicate";
-      AuthenticatedSignedWrites?: "AuthenticatedSignedWrites";
-      ExtendedProperties?: "ExtendedProperties";
-      NotifyEncryptionRequired?: "NotifyEncryptionRequired";
-      IndicateEncryptionRequired?: "IndicateEncryptionRequired";
-    }
+    properties: CharacteristicProperty[],
     characteristic: string;
     service: string;
     descriptors?: Descriptor[];
