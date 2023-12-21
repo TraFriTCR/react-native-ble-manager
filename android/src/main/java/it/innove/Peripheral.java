@@ -225,7 +225,7 @@ public class Peripheral extends BluetoothGattCallback {
 					characteristicsMap.putString("service", UUIDHelper.uuidToString(service.getUuid()));
 					characteristicsMap.putString("characteristic", UUIDHelper.uuidToString(characteristic.getUuid()));
 
-					characteristicsMap.putMap("properties", Helper.decodeProperties(characteristic));
+					characteristicsMap.putArray("properties", Helper.decodeProperties(characteristic));
 
 					if (characteristic.getPermissions() > 0) {
 						characteristicsMap.putMap("permissions", Helper.decodePermissions(characteristic));

@@ -3,48 +3,49 @@ package it.innove;
 import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothGattDescriptor;
 import com.facebook.react.bridge.Arguments;
+import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.WritableMap;
 import org.json.JSONArray;
 
 public class Helper {
 
-	public static WritableMap decodeProperties(BluetoothGattCharacteristic characteristic) {
+	public static WritableArray decodeProperties(BluetoothGattCharacteristic characteristic) {
 
 		// NOTE: props strings need to be consistent across iOS and Android
-		WritableMap props = Arguments.createMap();
+		WritableArray props = Arguments.createArray();
 		int properties = characteristic.getProperties();
 
 		if ((properties & BluetoothGattCharacteristic.PROPERTY_BROADCAST) != 0x0 ) {
-			props.putString("Broadcast", "Broadcast");
+			props.pushString( "Broadcast");
 		}
 
 		if ((properties & BluetoothGattCharacteristic.PROPERTY_READ) != 0x0 ) {
-			props.putString("Read", "Read");
+			props.pushString( "Read");
 		}
 
 		if ((properties & BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE) != 0x0 ) {
-			props.putString("WriteWithoutResponse", "WriteWithoutResponse");
+			props.pushString( "WriteWithoutResponse");
 		}
 
 		if ((properties & BluetoothGattCharacteristic.PROPERTY_WRITE) != 0x0 ) {
-			props.putString("Write", "Write");
+			props.pushString("Write");
 		}
 
 		if ((properties & BluetoothGattCharacteristic.PROPERTY_NOTIFY) != 0x0 ) {
-			props.putString("Notify", "Notify");
+			props.pushString( "Notify");
 		}
 
 		if ((properties & BluetoothGattCharacteristic.PROPERTY_INDICATE) != 0x0 ) {
-			props.putString("Indicate", "Indicate");
+			props.pushString( "Indicate");
 		}
 
 		if ((properties & BluetoothGattCharacteristic.PROPERTY_SIGNED_WRITE) != 0x0 ) {
 			// Android calls this "write with signature", using iOS name for now
-			props.putString("AuthenticateSignedWrites", "AuthenticateSignedWrites");
+			props.pushString( "AuthenticateSignedWrites");
 		}
 
 		if ((properties & BluetoothGattCharacteristic.PROPERTY_EXTENDED_PROPS) != 0x0 ) {
-			props.putString("ExtendedProperties", "ExtendedProperties");
+			props.pushString("ExtendedProperties");
 		}
 
 //      iOS only?
