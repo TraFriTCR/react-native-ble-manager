@@ -71,7 +71,6 @@ public class Peripheral extends BluetoothGattCallback {
 
 	private final Queue<Runnable> commandQueue = new ConcurrentLinkedQueue<>();
 	private final Handler mainHandler = new Handler(Looper.getMainLooper());
-	private Runnable discoverServicesRunnable;
 	private boolean commandQueueBusy = false;
 
 	private List<byte[]> writeQueue = new ArrayList<>();
@@ -289,10 +288,6 @@ public class Peripheral extends BluetoothGattCallback {
 	}
 	
 	private void handleDisconnect() {
-		if (discoverServicesRunnable != null) {
-			mainHandler.removeCallbacks(discoverServicesRunnable);
-			discoverServicesRunnable = null;
-		}
 
 		boolean canceledCommand = false;
 
@@ -365,18 +360,6 @@ public class Peripheral extends BluetoothGattCallback {
 			connecting = false;
 			if (newState == BluetoothProfile.STATE_CONNECTED && status == BluetoothGatt.GATT_SUCCESS) {
 				connected = true;
-
-				discoverServicesRunnable = new Runnable() {
-					@Override
-					public void run() {
-						if (gatt != null) {
-							gatt.discoverServices();
-						}
-						discoverServicesRunnable = null;
-					}
-				};
-
-				mainHandler.post(discoverServicesRunnable);
 
 				sendConnectionEvent(device, "BleManagerConnectPeripheral", status);
 
