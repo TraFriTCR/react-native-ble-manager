@@ -1,4 +1,80 @@
 declare module "react-native-ble-manager" {
+  export enum BTErrorType {
+    ATT_RESPONSE = 1,
+    INVALID_STATE = 2,
+    INVALID_ARGUMENT = 3,
+    UNEXPECTED = 4, 
+  }
+
+  // See Bluetooth spec for error code definitions
+  export enum ATTResponseCode {
+    SUCCESS = 0x00,
+    INVALID_HANDLE = 0x01,
+    READ_NOT_PERMIT = 0x02,
+    WRITE_NOT_PERMIT = 0x03,
+    INVALID_PDU = 0x04,
+    INSUF_AUTHENTICATION = 0x05,
+    REQ_NOT_SUPPORTED = 0x06,
+    INVALID_OFFSET = 0x07,
+    INSUF_AUTHORIZATION = 0x08,
+    PREPARE_Q_FULL = 0x09,
+    NOT_FOUND = 0x0a,
+    NOT_LONG = 0x0b,
+    INSUF_KEY_SIZE = 0x0c,
+    INVALID_ATTR_LEN = 0x0d,
+    ERR_UNLIKELY = 0x0e,
+    INSUF_ENCRYPTION = 0x0f,
+    UNSUPPORT_GRP_TYPE = 0x10,
+    INSUF_RESOURCE = 0x11,
+    DATABASE_OUT_OF_SYNC = 0x12,
+    VALUE_NOT_ALLOWED = 0x13,
+    
+    WRITE_REJECTED = 0xFC,
+    CCC_CFG_ERR = 0xFD,
+    PRC_IN_PROGRESS = 0xFE,
+    OUT_OF_RANGE = 0xFF,
+  }
+
+  export enum InvalidStateCode {
+    UNKNOWN_BTERROR = 1, // Error is related to BLE but otherwise unknown, not necessarily a bug
+    NOT_SUPPORTED = 2, // Feature not available on this platform or device
+    CONNECTION_ATTEMPT_FAILED = 3, // Attempt to start a connection but it failed to
+    PERIPHERAL_NOT_CONNECTED = 4, // The peripheral is not connected
+    PERIPHERAL_DISCONNECTED = 5, // The peripheral was recently connected but lost connection
+    PERIPHERAL_NOT_FOUND = 6, // The peripheral is not known, for example it was not found during a connection event
+    RESOURCE_NOT_FOUND = 7, // The characteristic, service, descriptor does not exist
+    BT_DISABLED = 8, // BLE is disabled
+    BT_UNSUPPORTED = 9, // BLE is unsupported on the provided device
+    GUI_RESOURCE_UNAVAILABLE = 10, // Failed to get UI resource like the current acitivity, likely b
+    CONNECTION_LIMIT_REACHED = 11, // Connection limit reached
+  }
+
+  // Error codes in BLE response or driver
+  export interface ATTResponseError {
+    type: BTErrorType.ATT_RESPONSE;
+    status: ATTResponseCode;
+  }
+
+  // Error codes for invalid state of device or system
+  export interface InvalidStateError {
+    type: BTErrorType.INVALID_STATE;
+    status: InvalidStateCode;
+  }
+
+  // Error codes for invalid arguments to the function which returned this error
+  export interface InvalidArgumentError {
+    type: BTErrorType.INVALID_ARGUMENT;
+    message: string;
+  }
+
+  // Errors indicative of a problem with the device, software, ect.  Likely indicates a bug in react-native-ble-manager
+  export interface UnexpectedError {
+    type: BTErrorType.UNEXPECTED;
+    message: string;
+  }
+
+  export type BTError = ATTResponseError | InvalidStateError | InvalidArgumentError | UnexpectedError;
+
   export interface Peripheral {
     id: string;
     rssi: number;
