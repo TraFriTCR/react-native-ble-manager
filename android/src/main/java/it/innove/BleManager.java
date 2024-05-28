@@ -42,6 +42,11 @@ import static android.app.Activity.RESULT_OK;
 import static android.bluetooth.BluetoothProfile.GATT;
 import static android.os.Build.VERSION_CODES.LOLLIPOP;
 
+import static it.innove.ErrorHelper.createInvalidStateErrorWritableMap;
+import static it.innove.ErrorHelper.createtInvalidArgumentErrorWritableMap;
+import static it.innove.ErrorHelper.createUnexpectedErrorWritableMap;
+import static it.innove.ErrorHelper.InvalidStateCode;
+
 class BleManager extends ReactContextBaseJavaModule {
 
     public static final String LOG_TAG = "ReactNativeBleManager";
@@ -68,7 +73,7 @@ class BleManager extends ReactContextBaseJavaModule {
                 if (resultCode == RESULT_OK) {
                     enableBluetoothCallback.invoke();
                 } else {
-                    enableBluetoothCallback.invoke("User refused to enable");
+                    enableBluetoothCallback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.BT_DISABLED));
                 }
                 enableBluetoothCallback = null;
             }
@@ -129,14 +134,14 @@ class BleManager extends ReactContextBaseJavaModule {
         // Is Bluetooth available?
         if (bluetoothAdapter == null) {
             Log.d(LOG_TAG, "No bluetooth support");
-            callback.invoke("No bluetooth support");
+            callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.BT_UNSUPPORTED));
             return true;
         }
 
         // Is Bluetooth enabled?
         if (!bluetoothAdapter.isEnabled()) {
             Log.d(LOG_TAG, "Bluetooth not enabled");
-            callback.invoke("Bluetooth not enabled");
+            callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.BT_DISABLED));
             return true;
         }
 
@@ -148,7 +153,7 @@ class BleManager extends ReactContextBaseJavaModule {
         Log.d(LOG_TAG, "start");
         if (getBluetoothAdapter() == null) {
             Log.d(LOG_TAG, "No bluetooth support");
-            callback.invoke("No bluetooth support");
+            callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.BT_UNSUPPORTED));
             return;
         }
         forceLegacy = false;
@@ -185,14 +190,14 @@ class BleManager extends ReactContextBaseJavaModule {
     public void enableBluetooth(Callback callback) {
         if (getBluetoothAdapter() == null) {
             Log.d(LOG_TAG, "No bluetooth support");
-            callback.invoke("No bluetooth support");
+            callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.BT_UNSUPPORTED));
             return;
         }
         if (!getBluetoothAdapter().isEnabled()) {
             enableBluetoothCallback = callback;
             Intent intentEnable = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
             if (getCurrentActivity() == null)
-                callback.invoke("Current activity not available");
+                callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.GUI_RESOURCE_UNAVAILABLE));
             else
                 getCurrentActivity().startActivityForResult(intentEnable, ENABLE_REQUEST);
         } else
@@ -234,12 +239,12 @@ class BleManager extends ReactContextBaseJavaModule {
 
     @ReactMethod
     public void createBond(String peripheralUUID, String peripheralPin, Callback callback) {
-        callback.invoke("Create bond not supported");
+        callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.NOT_SUPPORTED));
     }
 
     @ReactMethod
     private void removeBond(String peripheralUUID, Callback callback) {
-        callback.invoke("Remove bond not supported");
+        callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.NOT_SUPPORTED));
     }
 
     @ReactMethod
@@ -248,7 +253,7 @@ class BleManager extends ReactContextBaseJavaModule {
 
         Peripheral peripheral = retrieveOrCreatePeripheral(peripheralUUID);
         if (peripheral == null) {
-            callback.invoke("Invalid peripheral uuid");
+            callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.PERIPHERAL_NOT_FOUND));
             return;
         }
         peripheral.connect(callback, getCurrentActivity());
@@ -262,7 +267,7 @@ class BleManager extends ReactContextBaseJavaModule {
         if (peripheral != null) {
             peripheral.disconnect(callback, force);
         } else
-            callback.invoke("Peripheral not found");
+            callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.PERIPHERAL_NOT_FOUND));
     }
 
     @ReactMethod
@@ -271,7 +276,7 @@ class BleManager extends ReactContextBaseJavaModule {
         Log.d(LOG_TAG, "startNotification");
 
         if (serviceUUID == null || characteristicUUID == null) {
-            callback.invoke("ServiceUUID and characteristicUUID required.");
+            callback.invoke(createtInvalidArgumentErrorWritableMap("ServiceUUID and characteristicUUID required."));
             return;
         }
         Peripheral peripheral = peripherals.get(deviceUUID);
@@ -279,7 +284,7 @@ class BleManager extends ReactContextBaseJavaModule {
             peripheral.registerNotify(UUIDHelper.uuidFromString(serviceUUID),
                     UUIDHelper.uuidFromString(characteristicUUID), buffer, callback);
         } else
-            callback.invoke("Peripheral not found");
+            callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.PERIPHERAL_NOT_FOUND));
     }
 
     @ReactMethod
@@ -287,7 +292,7 @@ class BleManager extends ReactContextBaseJavaModule {
         Log.d(LOG_TAG, "startNotification");
 
         if (serviceUUID == null || characteristicUUID == null) {
-            callback.invoke("ServiceUUID and characteristicUUID required.");
+            callback.invoke(createtInvalidArgumentErrorWritableMap("ServiceUUID and characteristicUUID required."));
             return;
         }
         Peripheral peripheral = peripherals.get(deviceUUID);
@@ -295,7 +300,7 @@ class BleManager extends ReactContextBaseJavaModule {
             peripheral.registerNotify(UUIDHelper.uuidFromString(serviceUUID),
                     UUIDHelper.uuidFromString(characteristicUUID), 1, callback);
         } else
-            callback.invoke("Peripheral not found");
+            callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.PERIPHERAL_NOT_FOUND));
     }
 
     @ReactMethod
@@ -303,7 +308,7 @@ class BleManager extends ReactContextBaseJavaModule {
         Log.d(LOG_TAG, "stopNotification");
 
         if (serviceUUID == null || characteristicUUID == null) {
-            callback.invoke("ServiceUUID and characteristicUUID required.");
+            callback.invoke(createtInvalidArgumentErrorWritableMap("ServiceUUID and characteristicUUID required."));
             return;
         }
         Peripheral peripheral = peripherals.get(deviceUUID);
@@ -311,7 +316,7 @@ class BleManager extends ReactContextBaseJavaModule {
             peripheral.removeNotify(UUIDHelper.uuidFromString(serviceUUID),
                     UUIDHelper.uuidFromString(characteristicUUID), callback);
         } else
-            callback.invoke("Peripheral not found");
+            callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.PERIPHERAL_NOT_FOUND));
     }
 
     @ReactMethod
@@ -320,7 +325,7 @@ class BleManager extends ReactContextBaseJavaModule {
         Log.d(LOG_TAG, "Write to: " + deviceUUID);
 
         if (serviceUUID == null || characteristicUUID == null) {
-            callback.invoke("ServiceUUID and characteristicUUID required.");
+            callback.invoke(createtInvalidArgumentErrorWritableMap("ServiceUUID and characteristicUUID required."));
             return;
         }
         Peripheral peripheral = peripherals.get(deviceUUID);
@@ -333,7 +338,7 @@ class BleManager extends ReactContextBaseJavaModule {
             peripheral.write(UUIDHelper.uuidFromString(serviceUUID), UUIDHelper.uuidFromString(characteristicUUID),
                     decoded, maxByteSize, null, callback, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);
         } else
-            callback.invoke("Peripheral not found");
+            callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.PERIPHERAL_NOT_FOUND));
     }
 
     @ReactMethod
@@ -342,7 +347,7 @@ class BleManager extends ReactContextBaseJavaModule {
         Log.d(LOG_TAG, "Write without response to: " + deviceUUID);
 
         if (serviceUUID == null || characteristicUUID == null) {
-            callback.invoke("ServiceUUID and characteristicUUID required.");
+            callback.invoke(createtInvalidArgumentErrorWritableMap("ServiceUUID and characteristicUUID required."));
             return;
         }
         Peripheral peripheral = peripherals.get(deviceUUID);
@@ -355,7 +360,7 @@ class BleManager extends ReactContextBaseJavaModule {
             peripheral.write(UUIDHelper.uuidFromString(serviceUUID), UUIDHelper.uuidFromString(characteristicUUID),
                     decoded, maxByteSize, queueSleepTime, callback, BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE);
         } else
-            callback.invoke("Peripheral not found");
+            callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.PERIPHERAL_NOT_FOUND));
     }
 
     @ReactMethod
@@ -363,7 +368,7 @@ class BleManager extends ReactContextBaseJavaModule {
         Log.d(LOG_TAG, "Read from: " + deviceUUID);
 
         if (serviceUUID == null || characteristicUUID == null) {
-            callback.invoke("ServiceUUID and characteristicUUID required.");
+            callback.invoke(createtInvalidArgumentErrorWritableMap("ServiceUUID and characteristicUUID required."));
             return;
         }
         Peripheral peripheral = peripherals.get(deviceUUID);
@@ -371,7 +376,7 @@ class BleManager extends ReactContextBaseJavaModule {
             peripheral.read(UUIDHelper.uuidFromString(serviceUUID), UUIDHelper.uuidFromString(characteristicUUID),
                     callback);
         } else
-            callback.invoke("Peripheral not found", null);
+            callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.PERIPHERAL_NOT_FOUND));
     }
 
     @ReactMethod
@@ -382,7 +387,7 @@ class BleManager extends ReactContextBaseJavaModule {
         if (peripheral != null) {
             peripheral.retrieveServices(callback);
         } else
-            callback.invoke("Peripheral not found", null);
+            callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.PERIPHERAL_NOT_FOUND));
     }
 
     @ReactMethod
@@ -393,7 +398,7 @@ class BleManager extends ReactContextBaseJavaModule {
         if (peripheral != null) {
             peripheral.refreshCache(callback);
         } else
-            callback.invoke("Peripheral not found");
+            callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.PERIPHERAL_NOT_FOUND));
     }
 
     @ReactMethod
@@ -404,7 +409,7 @@ class BleManager extends ReactContextBaseJavaModule {
         if (peripheral != null) {
             peripheral.readRSSI(callback);
         } else
-            callback.invoke("Peripheral not found", null);
+            callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.PERIPHERAL_NOT_FOUND));
     }
 
     private CompletableFuture<Peripheral> saveConnectedPeripheral(final BluetoothDevice device) {
@@ -558,7 +563,7 @@ class BleManager extends ReactContextBaseJavaModule {
         }
         CompletableFuture.allOf(futures.toArray(new CompletableFuture<?>[0])).handle((v, e) -> {
             if (e != null) {
-                callback.invoke("Internal error: Failed to connect with a device which should have been connected: " + e);
+                callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.PERIPHERAL_NOT_CONNECTED));
                 return v;
             }
             try {
@@ -569,7 +574,7 @@ class BleManager extends ReactContextBaseJavaModule {
                 }
                 callback.invoke(null, map);
             } catch (Exception ex) {
-                callback.invoke("Internal error: Failed to get device map: " + ex);
+                callback.invoke(createUnexpectedErrorWritableMap("peripheral.asWritableMap threw an exception: " + ex));
             }
             return v;
         });
@@ -577,7 +582,7 @@ class BleManager extends ReactContextBaseJavaModule {
 
     @ReactMethod
     public void getBondedPeripherals(Callback callback) {
-        callback.invoke("Get bonded not supported");
+        callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.NOT_SUPPORTED));
     }
 
     @ReactMethod
@@ -589,14 +594,14 @@ class BleManager extends ReactContextBaseJavaModule {
         if (peripheral != null) {
             synchronized (peripherals) {
                 if (peripheral.isConnected()) {
-                    callback.invoke("Peripheral can not be removed while connected");
+                    callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.NOT_SUPPORTED));
                 } else {
                     peripherals.remove(deviceUUID);
                     callback.invoke();
                 }
             }
         } else
-            callback.invoke("Peripheral not found");
+            callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.PERIPHERAL_NOT_FOUND));
     }
 
     @ReactMethod
@@ -607,7 +612,7 @@ class BleManager extends ReactContextBaseJavaModule {
         if (peripheral != null) {
             peripheral.requestConnectionPriority(connectionPriority, callback);
         } else {
-            callback.invoke("Peripheral not found", null);
+            callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.PERIPHERAL_NOT_FOUND));
         }
     }
 
@@ -619,7 +624,7 @@ class BleManager extends ReactContextBaseJavaModule {
         if (peripheral != null) {
             peripheral.requestMTU(mtu, callback);
         } else {
-            callback.invoke("Peripheral not found", null);
+            callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.PERIPHERAL_NOT_FOUND));
         }
     }
 

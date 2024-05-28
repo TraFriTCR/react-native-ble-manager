@@ -41,6 +41,12 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import static android.os.Build.VERSION_CODES.LOLLIPOP;
 import static com.facebook.react.common.ReactConstants.TAG;
 
+import static it.innove.ErrorHelper.createInvalidStateErrorWritableMap;
+import static it.innove.ErrorHelper.createATTResponseErrorWritableMap;
+import static it.innove.ErrorHelper.createtInvalidArgumentErrorWritableMap;
+import static it.innove.ErrorHelper.createUnexpectedErrorWritableMap;
+import static it.innove.ErrorHelper.InvalidStateCode;
+
 /**
  * Peripheral wraps the BluetoothDevice and provides methods to convert to JSON.
  */
@@ -144,13 +150,13 @@ public class Peripheral extends BluetoothGattCallback {
 					connectCallback = null;
 					completedCommand();
 				} else {
-					callback.invoke("BluetoothGatt is null");
+					callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.CONNECTION_ATTEMPT_FAILED));
 					connectCallback = null;
 					completedCommand();
 				}
 			}
 		})) {
-			callback.invoke("Internal error: failed to enqueue operation");
+			callback.invoke(createUnexpectedErrorWritableMap("Failed to enqueue command"));
 		}
 	}
 	// bt_btif : Register with GATT stack failed.
@@ -296,7 +302,7 @@ public class Peripheral extends BluetoothGattCallback {
 		for (Callback currentCallback : callbacks) {
 			if (currentCallback != null) {
 				try {
-					currentCallback.invoke("Device disconnected");
+					currentCallback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.PERIPHERAL_DISCONNECTED));
 				} catch (Exception e) {
 					e.printStackTrace();
 				} finally {
@@ -441,7 +447,7 @@ public class Peripheral extends BluetoothGattCallback {
 				if (status == GATT_AUTH_FAIL || status == GATT_INSUFFICIENT_AUTHENTICATION) {
 					Log.d(BleManager.LOG_TAG, "Read needs bonding");
 				}
-				readCallback.invoke("Error reading " + characteristic.getUuid() + " status=" + status, null);
+				readCallback.invoke(createATTResponseErrorWritableMap(status));
 				readCallback = null;
 			} else if (readCallback != null) {
 				final byte[] dataValue = copyOf(characteristic.getValue());
@@ -468,7 +474,7 @@ public class Peripheral extends BluetoothGattCallback {
 					// *not* doing completedCommand()
 					return;
 				}
-				writeCallback.invoke( "Error writing " + characteristic.getUuid() + " status=" + status, null);
+				writeCallback.invoke(createATTResponseErrorWritableMap(status));
 				writeCallback = null;
 			} else if (writeCallback != null) {
 				writeCallback.invoke();
@@ -486,7 +492,7 @@ public class Peripheral extends BluetoothGattCallback {
 					registerNotifyCallback.invoke();
 					Log.d(BleManager.LOG_TAG, "onDescriptorWrite success");
 				} else {
-					registerNotifyCallback.invoke("Error writing descriptor status=" + status, null);
+					registerNotifyCallback.invoke(createATTResponseErrorWritableMap(status));
 					Log.e(BleManager.LOG_TAG, "Error writing descriptor status=" + status);
 				}
 
@@ -509,7 +515,7 @@ public class Peripheral extends BluetoothGattCallback {
 					updateRssi(rssi);
 					readRSSICallback.invoke(null, rssi);
 				} else {
-					readRSSICallback.invoke("Error reading RSSI status=" + status, null);
+					readRSSICallback.invoke(createATTResponseErrorWritableMap(status));
 				}
 
 				readRSSICallback = null;
@@ -530,7 +536,7 @@ public class Peripheral extends BluetoothGattCallback {
 
 	private void setNotify(UUID serviceUUID, UUID characteristicUUID, final Boolean notify, Callback callback) {
 		if (! isConnected() || gatt == null) {
-			callback.invoke("Device is not connected", null);
+			callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.PERIPHERAL_NOT_CONNECTED));
 			completedCommand();
 			return;
 		}
@@ -539,20 +545,20 @@ public class Peripheral extends BluetoothGattCallback {
 		final BluetoothGattCharacteristic characteristic = findNotifyCharacteristic(service, characteristicUUID);
 
 		if (characteristic == null) {
-			callback.invoke("Characteristic " + characteristicUUID + " not found");
+			callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.RESOURCE_NOT_FOUND));
 			completedCommand();
 			return;
 		}
 
 		if (! gatt.setCharacteristicNotification(characteristic, notify)) {
-			callback.invoke("Failed to register notification for " + characteristicUUID);
+			callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.UNKNOWN_BTERROR));
 			completedCommand();
 			return;
 		}
 
 		final BluetoothGattDescriptor descriptor = characteristic.getDescriptor(UUIDHelper.uuidFromString(CHARACTERISTIC_NOTIFICATION_CONFIG));
 		if (descriptor == null) {
-			callback.invoke("Set notification failed for " + characteristicUUID);
+			callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.RESOURCE_NOT_FOUND));
 			completedCommand();
 			return;
 		}
@@ -568,7 +574,7 @@ public class Peripheral extends BluetoothGattCallback {
 		} else {
 			String msg = "Characteristic " + characteristicUUID + " does not have NOTIFY or INDICATE property set";
 			Log.d(BleManager.LOG_TAG, msg);
-			callback.invoke(msg);
+			callback.invoke(createtInvalidArgumentErrorWritableMap(msg));
 			completedCommand();
 			return;
 		}
@@ -587,7 +593,7 @@ public class Peripheral extends BluetoothGattCallback {
 		}
 
 		if (! result) {
-			callback.invoke( "writeDescriptor failed for descriptor: " + descriptor.getUuid(), null);
+			callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.UNKNOWN_BTERROR));
 			registerNotifyCallback = null;
 			completedCommand();
 		}
@@ -608,7 +614,7 @@ public class Peripheral extends BluetoothGattCallback {
 			this.setNotify(serviceUUID, characteristicUUID, true, callback);
 		})) {
 			Log.e(BleManager.LOG_TAG, "Could not enqueue setNotify command to register notify");
-			callback.invoke("Internal error: failed to enqueue operation");
+			callback.invoke(createUnexpectedErrorWritableMap("Internal error: failed to enqueue operation"));
 		}
 	}
 
@@ -627,7 +633,7 @@ public class Peripheral extends BluetoothGattCallback {
 			this.setNotify(serviceUUID, characteristicUUID, false, callback);
 		})) {
 			Log.e(BleManager.LOG_TAG, "Could not enqueue setNotify command to remove notify");
-			callback.invoke("Internal error: failed to enqueue operation");
+			callback.invoke(createUnexpectedErrorWritableMap("Internal error: failed to enqueue operation"));
 		}
 	}
 
@@ -674,7 +680,7 @@ public class Peripheral extends BluetoothGattCallback {
 			}
 
 			if (!isConnected() || gatt == null) {
-				callback.invoke("Device is not connected", null);
+				callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.PERIPHERAL_NOT_CONNECTED));
 				completedCommand();
 				return;
 			}
@@ -683,20 +689,20 @@ public class Peripheral extends BluetoothGattCallback {
 			final BluetoothGattCharacteristic characteristic = findReadableCharacteristic(service, characteristicUUID);
 
 			if (characteristic == null) {
-				callback.invoke("Characteristic " + characteristicUUID + " not found.", null);
+				callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.RESOURCE_NOT_FOUND));
 				completedCommand();
 				return;
 			}
 
 			readCallback = callback;
 			if (!gatt.readCharacteristic(characteristic)) {
-				callback.invoke("Read failed", null);
+				callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.UNKNOWN_BTERROR));
 				readCallback = null;
 				completedCommand();
 			}
 
 		})) {
-			callback.invoke("Internal error: failed to enqueue operation");
+			callback.invoke(createUnexpectedErrorWritableMap("Internal error: failed to enqueue operation"));
 		}
 	}
 
@@ -758,12 +764,8 @@ public class Peripheral extends BluetoothGattCallback {
 			if (BleManager.handledInvalidState(bluetoothAdapter, callback)) {
 				completedCommand();
 				return;
-			} else if (!isConnected()) {
-				callback.invoke("Device is not connected", null);
-				completedCommand();
-				return;
-			} else if (gatt == null) {
-				callback.invoke("BluetoothGatt is null", null);
+			} else if (!isConnected() || gatt == null) {
+				callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.PERIPHERAL_NOT_CONNECTED));
 				completedCommand();
 				return;
 			} else {
@@ -776,7 +778,7 @@ public class Peripheral extends BluetoothGattCallback {
 			}
 		})) {
 			Log.d(BleManager.LOG_TAG, "Could not queue readRemoteRssi command");
-			callback.invoke("Internal error: failed to enqueue operation");
+			callback.invoke(createUnexpectedErrorWritableMap("Internal error: failed to enqueue operation"));
 		}
 	}
 
@@ -787,8 +789,8 @@ public class Peripheral extends BluetoothGattCallback {
 					completedCommand();
 					return;
 				}
-				if (gatt == null) {
-					callback.invoke("BluetoothGatt is null");
+				if (!isConnected() || gatt == null) {
+					callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.PERIPHERAL_NOT_CONNECTED));
 					completedCommand();
 					return;
 				}
@@ -797,16 +799,16 @@ public class Peripheral extends BluetoothGattCallback {
 					boolean res = ((Boolean) localMethod.invoke(gatt, new Object[0])).booleanValue();
 					callback.invoke(null, res);
 				} else {
-					callback.invoke("Could not refresh cache for device.");
+					callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.NOT_SUPPORTED));
 				}
 			} catch (Exception localException) {
 				Log.e(TAG, "An exception occured while refreshing device");
-				callback.invoke(localException.getMessage());
+				callback.invoke(createUnexpectedErrorWritableMap(localException.getMessage()));
 			} finally {
 				completedCommand();
 			}
 		})) {
-			callback.invoke("Internal error: failed to enqueue operation");
+			callback.invoke(createUnexpectedErrorWritableMap("Internal error: failed to enqueue operation"));
 		}
 	}
 
@@ -815,12 +817,8 @@ public class Peripheral extends BluetoothGattCallback {
 			if (BleManager.handledInvalidState(bluetoothAdapter, callback)) {
 				completedCommand();
 				return;
-			} else if (!isConnected()) {
-				callback.invoke("Device is not connected", null);
-				completedCommand();
-				return;
-			} else if (gatt == null) {
-				callback.invoke("BluetoothGatt is null", null);
+			} else if (!isConnected() || gatt == null) {
+				callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.PERIPHERAL_NOT_CONNECTED));
 				completedCommand();
 				return;
 			} else {
@@ -828,7 +826,7 @@ public class Peripheral extends BluetoothGattCallback {
 				gatt.discoverServices();
 			}
 		})) {
-			callback.invoke("Internal error: failed to enqueue operation");
+			callback.invoke(createUnexpectedErrorWritableMap("Internal error: failed to enqueue operation"));
 		}
 	}
 
@@ -869,8 +867,8 @@ public class Peripheral extends BluetoothGattCallback {
 				else
 					writeCallback = null;
 
-				if (gatt == null) {
-					writeCallback.invoke("Write failed: gatt is null");
+				if (!isConnected() || gatt == null) {
+					writeCallback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.PERIPHERAL_NOT_CONNECTED));
 					writeCallback = null;
 					completedCommand();
 					return;
@@ -879,7 +877,7 @@ public class Peripheral extends BluetoothGattCallback {
 				if (!gatt.writeCharacteristic(characteristic)) {
 					// write without response, caller will handle the callback
 					if (writeCallback != null) {
-						writeCallback.invoke("Write failed", writeCallback);
+						writeCallback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.UNKNOWN_BTERROR));
 						writeCallback = null;
 					}
 					completedCommand();
@@ -896,7 +894,7 @@ public class Peripheral extends BluetoothGattCallback {
 			}
 
 			if (!isConnected() || gatt == null) {
-				callback.invoke("Device is not connected", null);
+				callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.PERIPHERAL_NOT_CONNECTED));
 				completedCommand();
 				return;
 			}
@@ -905,7 +903,7 @@ public class Peripheral extends BluetoothGattCallback {
 			BluetoothGattCharacteristic characteristic = findWritableCharacteristic(service, characteristicUUID, writeType);
 
 			if (characteristic == null) {
-				callback.invoke("Characteristic " + characteristicUUID + " not found.");
+				callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.RESOURCE_NOT_FOUND));
 				completedCommand();
 				return;
 			}
@@ -914,7 +912,7 @@ public class Peripheral extends BluetoothGattCallback {
 
 			if (data.length <= maxByteSize) {
 				if (! doWrite(characteristic, data, callback)) {
-					callback.invoke("Write failed");
+					callback.invoke(createUnexpectedErrorWritableMap("Internal error: failed to enqueue operation"));
 				} else {
 					if (BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE == writeType) {
 						callback.invoke();
@@ -945,21 +943,21 @@ public class Peripheral extends BluetoothGattCallback {
 					writeQueue.addAll(splittedMessage);
 					if (! doWrite(characteristic, firstMessage, callback)) {
 						writeQueue.clear();
-						callback.invoke("Write failed");
+						callback.invoke(createUnexpectedErrorWritableMap("Internal error: failed to enqueue operation"));
 					}
 				} else {
 					try {
 						boolean writeError = false;
 						if (! doWrite(characteristic, firstMessage, callback)) {
 							writeError = true;
-							callback.invoke("Write failed");
+							callback.invoke(createUnexpectedErrorWritableMap("Internal error: failed to enqueue operation"));
 						}
 						if (! writeError) {
 							Thread.sleep(queueSleepTime);
 							for (byte[] message : splittedMessage) {
 								if (! doWrite(characteristic, message, callback)) {
 									writeError = true;
-									callback.invoke("Write failed");
+									callback.invoke(createUnexpectedErrorWritableMap("Internal error: failed to enqueue operation"));
 									break;
 								}
 								Thread.sleep(queueSleepTime);
@@ -969,14 +967,14 @@ public class Peripheral extends BluetoothGattCallback {
 							}
 						}
 					} catch (InterruptedException e) {
-						callback.invoke("Error during writing");
+						callback.invoke(createUnexpectedErrorWritableMap("Internal error: "+ e.getMessage()));
 					}
 				}
 			}
 
 			completedCommand();
 		})) {
-			callback.invoke("Internal error: failed to enqueue operation");
+			callback.invoke(createUnexpectedErrorWritableMap("Internal error: failed to enqueue operation"));
 		}
 	}
 
@@ -986,20 +984,20 @@ public class Peripheral extends BluetoothGattCallback {
 				completedCommand();
 				return;
 			}
-			if (gatt != null) {
+			if (isConnected() && gatt != null) {
 				if (Build.VERSION.SDK_INT >= LOLLIPOP) {
 					boolean status = gatt.requestConnectionPriority(connectionPriority);
 					callback.invoke(null, status);
 				} else {
-					callback.invoke("Requesting connection priority requires at least API level 21", null);
+					callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.NOT_SUPPORTED));
 				}
 			} else {
-				callback.invoke("BluetoothGatt is null", null);
+				callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.PERIPHERAL_NOT_CONNECTED));
 			}
 
 			completedCommand();
 		})) {
-			callback.invoke("Internal error: failed to enqueue operation");
+			callback.invoke(createUnexpectedErrorWritableMap("Internal error: failed to enqueue operation"));
 		}
 	}
 
@@ -1010,14 +1008,8 @@ public class Peripheral extends BluetoothGattCallback {
 				return;
 			}
 
-			if (!isConnected()) {
-				callback.invoke("Device is not connected", null);
-				completedCommand();
-				return;
-			}
-
-			if (gatt == null) {
-				callback.invoke("BluetoothGatt is null", null);
+			if (!isConnected() || gatt == null) {
+				callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.PERIPHERAL_NOT_CONNECTED));
 				completedCommand();
 				return;
 			}
@@ -1025,16 +1017,16 @@ public class Peripheral extends BluetoothGattCallback {
 			if (Build.VERSION.SDK_INT >= LOLLIPOP) {
 				requestMTUCallback = callback;
 				if (!gatt.requestMtu(mtu)) {
-					requestMTUCallback.invoke("Request MTU failed", null);
+					requestMTUCallback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.UNKNOWN_BTERROR));
 					requestMTUCallback = null;
 					completedCommand();
 				}
 			} else {
-				callback.invoke("Requesting MTU requires at least API level 21", null);
+				callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.NOT_SUPPORTED));
 				completedCommand();
 			}
 		})) {
-			callback.invoke("Internal error: failed to enqueue operation");
+			callback.invoke(createUnexpectedErrorWritableMap("Internal error: failed to enqueue operation"));
 		}
 	}
 
@@ -1046,7 +1038,7 @@ public class Peripheral extends BluetoothGattCallback {
 				if (status == BluetoothGatt.GATT_SUCCESS) {
 					requestMTUCallback.invoke(null, mtu);
 				} else {
-					requestMTUCallback.invoke("Error requesting MTU status = " + status, null);
+					requestMTUCallback.invoke(createATTResponseErrorWritableMap(status));
 				}
 
 				requestMTUCallback = null;
