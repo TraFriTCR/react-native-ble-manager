@@ -11,6 +11,7 @@
 		A908F1931CEEFEB500BE1488 /* CBPeripheral+Extensions.m in Sources */ = {isa = PBXBuildFile; fileRef = A908F18D1CEEFEB500BE1488 /* CBPeripheral+Extensions.m */; };
 		A908F1941CEEFEB500BE1488 /* BLECommandContext.m in Sources */ = {isa = PBXBuildFile; fileRef = A908F18F1CEEFEB500BE1488 /* BLECommandContext.m */; };
 		A908F1951CEEFEB500BE1488 /* BleManager.m in Sources */ = {isa = PBXBuildFile; fileRef = A908F1911CEEFEB500BE1488 /* BleManager.m */; };
+		ADEC24472C0773E100E508A6 /* ErrorHelper.m in Sources */ = {isa = PBXBuildFile; fileRef = ADEC24452C0773E100E508A6 /* ErrorHelper.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -35,6 +36,8 @@
 		A908F18F1CEEFEB500BE1488 /* BLECommandContext.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = BLECommandContext.m; sourceTree = "<group>"; };
 		A908F1901CEEFEB500BE1488 /* BleManager.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = BleManager.h; sourceTree = "<group>"; };
 		A908F1911CEEFEB500BE1488 /* BleManager.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = BleManager.m; sourceTree = "<group>"; };
+		ADEC24452C0773E100E508A6 /* ErrorHelper.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = ErrorHelper.m; sourceTree = "<group>"; };
+		ADEC24462C0773E100E508A6 /* ErrorHelper.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ErrorHelper.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -67,6 +70,8 @@
 		A908F1891CEEFE0F00BE1488 /* BleManager */ = {
 			isa = PBXGroup;
 			children = (
+				ADEC24462C0773E100E508A6 /* ErrorHelper.h */,
+				ADEC24452C0773E100E508A6 /* ErrorHelper.m */,
 				A908F18A1CEEFEB500BE1488 /* NSData+Conversion.h */,
 				A908F18B1CEEFEB500BE1488 /* NSData+Conversion.m */,
 				A908F18C1CEEFEB500BE1488 /* CBPeripheral+Extensions.h */,
@@ -118,6 +123,7 @@
 			developmentRegion = English;
 			hasScannedForEncodings = 0;
 			knownRegions = (
+				English,
 				en,
 			);
 			mainGroup = 58B511D21A9E6C8500147676;
@@ -138,6 +144,7 @@
 				A908F1931CEEFEB500BE1488 /* CBPeripheral+Extensions.m in Sources */,
 				A908F1951CEEFEB500BE1488 /* BleManager.m in Sources */,
 				A908F1921CEEFEB500BE1488 /* NSData+Conversion.m in Sources */,
+				ADEC24472C0773E100E508A6 /* ErrorHelper.m in Sources */,
 				A908F1941CEEFEB500BE1488 /* BLECommandContext.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
