@@ -5,6 +5,7 @@
 #import "NSData+Conversion.h"
 #import "CBPeripheral+Extensions.h"
 #import "BLECommandContext.h"
+#import "ErrorHelper.h"
 
 static CBCentralManager *_sharedManager = nil;
 static BleManager * _instance = nil;
@@ -86,6 +87,40 @@ bool hasListeners;
     return @[@"BleManagerDidUpdateValueForCharacteristic", @"BleManagerStopScan", @"BleManagerDiscoverPeripheral", @"BleManagerConnectPeripheral", @"BleManagerDisconnectPeripheral", @"BleManagerDidUpdateState", @"BleManagerCentralManagerWillRestoreState", @"BleManagerDidUpdateNotificationStateFor"];
 }
 
+-(NSDictionary*) createError:(NSError *)error
+{
+    if ([error.domain isEqualToString:CBATTErrorDomain]) {
+        return [ErrorHelper createATTResponseErrorDictionaryWithStatus:error.code];
+    } else if ([error.domain isEqualToString:CBErrorDomain]) {
+        switch (error.code) {
+            case CBErrorUnknown:
+            case CBErrorOutOfSpace:
+            case CBErrorOperationCancelled:
+            case CBErrorConnectionLimitReached:
+            case CBErrorConnectionTimeout:
+            case CBErrorAlreadyAdvertising:
+                return [ErrorHelper createInvalidStateErrorDictionaryWithStatus:InvalidStateCodeUnknownBterror];
+            case CBErrorInvalidParameters:
+            case CBErrorUUIDNotAllowed:
+            case CBErrorOperationNotSupported:
+                return [ErrorHelper createInvalidArgumentErrorDictionaryWithMessage:error.accessibilityLabel];
+            case CBErrorInvalidHandle:
+                return [ErrorHelper createInvalidStateErrorDictionaryWithStatus:InvalidStateCodeResourceNotFound];
+            case CBErrorNotConnected:
+                return [ErrorHelper createInvalidStateErrorDictionaryWithStatus:InvalidStateCodePeripheralNotConnected];
+            case CBErrorPeripheralDisconnected:
+                return [ErrorHelper createInvalidStateErrorDictionaryWithStatus:InvalidStateCodePeripheralDisconnected];
+            case CBErrorConnectionFailed:
+                return [ErrorHelper createInvalidStateErrorDictionaryWithStatus:InvalidStateCodeConnectionAttemptFailed];
+            case CBErrorUnknownDevice:
+                return [ErrorHelper createInvalidStateErrorDictionaryWithStatus:InvalidStateCodePeripheralNotFound];
+            default:
+                return [ErrorHelper createUnexpectedErrorDictionaryWithMessage:error.accessibilityLabel];
+        }
+    } else {
+        return [ErrorHelper createUnexpectedErrorDictionaryWithMessage:error.accessibilityLabel];
+    }
+}
 
 - (void)peripheral:(CBPeripheral *)peripheral didUpdateValueForCharacteristic:(CBCharacteristic *)characteristic error:(NSError *)error {
     
@@ -96,7 +131,7 @@ bool hasListeners;
         if (error) {
             NSLog(@"Error %@ :%@", characteristic.UUID, error);
             if (isCompatibleCallback) {
-                readCallback(@[error, [NSNull null]]);
+                readCallback(@[[self createError:error], [NSNull null]]);
                 readCallback = nil;
                 [self completedCommand];
             }
@@ -126,7 +161,7 @@ bool hasListeners;
         if (error) {
             NSLog(@"Error in didUpdateNotificationStateForCharacteristic: %@", error);
             if (isValidCallback) {
-                notificationCallback(@[@"Failed to start / stop notification"]);
+                notificationCallback(@[[self createError:error]]);
                 notificationCallback = nil;
                 [self completedCommand];
             }
@@ -301,7 +336,7 @@ bool hasListeners;
         return false;
     } else {
         NSString *error = @"Bluetooth is not enabled";
-        callback(@[error, [NSNull null]]);
+        callback(@[[ErrorHelper createInvalidStateErrorDictionaryWithStatus:InvalidStateCodeBtDisabled], [NSNull null]]);
         return true;
     }
 }
@@ -509,8 +544,7 @@ RCT_EXPORT_METHOD(connect:(NSString *)peripheralUUID callback:(nonnull RCTRespon
                     NSLog(@"Successfull retrieved peripheral with UUID : %@", peripheralUUID);
                 }
             } else {
-                NSString *error = [NSString stringWithFormat:@"Wrong UUID format %@", peripheralUUID];
-                callback(@[error, [NSNull null]]);
+                callback(@[[ErrorHelper createInvalidArgumentErrorDictionaryWithMessage:[NSString stringWithFormat:@"Wrong UUID format %@", peripheralUUID]], [NSNull null]]);
                 [self completedCommand];
                 return;
             }
@@ -522,9 +556,7 @@ RCT_EXPORT_METHOD(connect:(NSString *)peripheralUUID callback:(nonnull RCTRespon
             [manager connectPeripheral:peripheral options:nil];
             
         } else {
-            NSString *error = [NSString stringWithFormat:@"Could not find peripheral %@.", peripheralUUID];
-            NSLog(@"%@", error);
-            callback(@[error, [NSNull null]]);
+            callback(@[[ErrorHelper createInvalidStateErrorDictionaryWithStatus:InvalidStateCodePeripheralNotFound], [NSNull null]]);
             [self completedCommand];
         }
     }];
@@ -555,9 +587,7 @@ RCT_EXPORT_METHOD(disconnect:(NSString *)peripheralUUID force:(BOOL)force callba
         callback(@[]);
         
     } else {
-        NSString *error = [NSString stringWithFormat:@"Could not find peripheral %@.", peripheralUUID];
-        NSLog(@"%@", error);
-        callback(@[error]);
+        callback(@[[ErrorHelper createInvalidStateErrorDictionaryWithStatus:InvalidStateCodePeripheralNotFound], [NSNull null]]);
     }
 }
 
@@ -575,7 +605,7 @@ RCT_EXPORT_METHOD(checkState)
 
     dispatch_async(commandDispatch, ^{
         if (connectCallback) {
-            connectCallback(@[errorStr]);
+            connectCallback(@[[self createError:error]]);
             connectCallback = nil;
             [self completedCommand];
         }
@@ -735,11 +765,16 @@ RCT_EXPORT_METHOD(readRSSI:(NSString *)deviceUUID callback:(nonnull RCTResponseS
         
         CBPeripheral *peripheral = [self findPeripheralByUUID:deviceUUID];
         
-        if (peripheral && peripheral.state == CBPeripheralStateConnected) {
-            readRSSICallback = callback;
-            [peripheral readRSSI];
+        if (peripheral) {
+            if (peripheral.state == CBPeripheralStateConnected) {
+                readRSSICallback = callback;
+                [peripheral readRSSI];
+            } else {
+                callback(@[[ErrorHelper createInvalidStateErrorDictionaryWithStatus:InvalidStateCodePeripheralNotConnected], [NSNull null]]);
+                [self completedCommand];
+            }
         } else {
-            callback(@[@"Peripheral not found or not connected"]);
+            callback(@[[ErrorHelper createInvalidStateErrorDictionaryWithStatus:InvalidStateCodePeripheralNotFound], [NSNull null]]);
             [self completedCommand];
         }
     }];
@@ -758,23 +793,27 @@ RCT_EXPORT_METHOD(retrieveServices:(NSString *)deviceUUID services:(NSArray<NSSt
         
         CBPeripheral *peripheral = [self findPeripheralByUUID:deviceUUID];
         
-        if (peripheral && peripheral.state == CBPeripheralStateConnected) {
-            retrieveServicesCallback = callback;
+        if (peripheral) {
+            if (peripheral.state == CBPeripheralStateConnected) {
+                retrieveServicesCallback = callback;
 
-            NSMutableArray<CBUUID *> *uuids = [NSMutableArray new];
-            for ( NSString *string in services ) {
-                CBUUID *uuid = [CBUUID UUIDWithString:string];
-                [uuids addObject:uuid];
-            }
-            
-            if ( uuids.count > 0 ) {
-                [peripheral discoverServices:uuids];
+                NSMutableArray<CBUUID *> *uuids = [NSMutableArray new];
+                for ( NSString *string in services ) {
+                    CBUUID *uuid = [CBUUID UUIDWithString:string];
+                    [uuids addObject:uuid];
+                }
+                
+                if ( uuids.count > 0 ) {
+                    [peripheral discoverServices:uuids];
+                } else {
+                    [peripheral discoverServices:nil];
+                }
             } else {
-                [peripheral discoverServices:nil];
+                callback(@[[ErrorHelper createInvalidStateErrorDictionaryWithStatus:InvalidStateCodePeripheralNotConnected], [NSNull null]]);
+                [self completedCommand];
             }
-            
         } else {
-            callback(@[@"Peripheral not found or not connected"]);
+            callback(@[[ErrorHelper createInvalidStateErrorDictionaryWithStatus:InvalidStateCodePeripheralNotFound], [NSNull null]]);
             [self completedCommand];
         }
     }];
@@ -852,32 +891,32 @@ RCT_EXPORT_METHOD(isBluetoothEnabled:(nonnull RCTResponseSenderBlock)callback)
 
 RCT_EXPORT_METHOD(enableBluetooth:(nonnull RCTResponseSenderBlock)callback)
 {
-    callback(@[@"Not supported"]);
+    callback(@[[ErrorHelper createInvalidStateErrorDictionaryWithStatus:InvalidStateCodeNotSupported]]);
 }
 
 RCT_EXPORT_METHOD(getBondedPeripherals:(nonnull RCTResponseSenderBlock)callback)
 {
-    callback(@[@"Not supported"]);
+    callback(@[[ErrorHelper createInvalidStateErrorDictionaryWithStatus:InvalidStateCodeNotSupported]]);
 }
 
 RCT_EXPORT_METHOD(createBond:(NSString *)deviceUUID devicePin:(NSString *)devicePin callback:(nonnull RCTResponseSenderBlock)callback)
 {
-    callback(@[@"Not supported"]);
+    callback(@[[ErrorHelper createInvalidStateErrorDictionaryWithStatus:InvalidStateCodeNotSupported]]);
 }
 
 RCT_EXPORT_METHOD(removeBond:(NSString *)deviceUUID callback:(nonnull RCTResponseSenderBlock)callback)
 {
-    callback(@[@"Not supported"]);
+    callback(@[[ErrorHelper createInvalidStateErrorDictionaryWithStatus:InvalidStateCodeNotSupported]]);
 }
 
 RCT_EXPORT_METHOD(removePeripheral:(NSString *)deviceUUID callback:(nonnull RCTResponseSenderBlock)callback)
 {
-    callback(@[@"Not supported"]);
+    callback(@[[ErrorHelper createInvalidStateErrorDictionaryWithStatus:InvalidStateCodeNotSupported]]);
 }
 
 RCT_EXPORT_METHOD(requestMTU:(NSString *)deviceUUID mtu:(NSInteger)mtu callback:(nonnull RCTResponseSenderBlock)callback)
 {
-    callback(@[@"Not supported"]);
+    callback(@[[ErrorHelper createInvalidStateErrorDictionaryWithStatus:InvalidStateCodeNotSupported]]);
 }
 
 - (void)peripheral:(CBPeripheral *)peripheral didWriteValueForCharacteristic:(CBCharacteristic *)characteristic error:(NSError *)error {
@@ -886,9 +925,9 @@ RCT_EXPORT_METHOD(requestMTU:(NSString *)deviceUUID mtu:(NSInteger)mtu callback:
     dispatch_async(commandDispatch, ^{
         if (writeCallback) {
             if (error) {
-                NSLog(@"%@", error);
+                NSLog(@"Error code: %ld", error.code);
                 [writeQueue removeAllObjects];
-                writeCallback(@[error.localizedDescription]);
+                writeCallback(@[[self createError:error]]);
                 writeCallback = nil;
                 [self completedCommand];
             } else {
@@ -948,42 +987,42 @@ RCT_EXPORT_METHOD(requestMTU:(NSString *)deviceUUID mtu:(NSInteger)mtu callback:
 
 }
 
-- (void)cancelCurrentCommand:(NSString*) errorStr
+- (void)cancelCurrentCommandDueToDisconnect
 {
     bool canceledCommand = false;
 
     if (connectCallback) {
-        connectCallback(@[errorStr]);
+        connectCallback(@[[ErrorHelper createInvalidStateErrorDictionaryWithStatus:InvalidStateCodePeripheralDisconnected]]);
         connectCallback = nil;
         canceledCommand = true;
     }
     
     if (readRSSICallback) {
-        readRSSICallback(@[errorStr]);
+        readRSSICallback(@[[ErrorHelper createInvalidStateErrorDictionaryWithStatus:InvalidStateCodePeripheralDisconnected]]);
         readRSSICallback = nil;
         canceledCommand = true;
     }
     
     if (retrieveServicesCallback) {
-        retrieveServicesCallback(@[errorStr]);
+        retrieveServicesCallback(@[[ErrorHelper createInvalidStateErrorDictionaryWithStatus:InvalidStateCodePeripheralDisconnected]]);
         retrieveServicesCallback = nil;
         canceledCommand = true;
     }
     
     if (readCallback) {
-        readCallback(@[errorStr]);
+        readCallback(@[[ErrorHelper createInvalidStateErrorDictionaryWithStatus:InvalidStateCodePeripheralDisconnected]]);
         readCallback = nil;
         canceledCommand = true;
     }
     
     if (writeCallback) {
-        writeCallback(@[errorStr]);
+        writeCallback(@[[ErrorHelper createInvalidStateErrorDictionaryWithStatus:InvalidStateCodePeripheralDisconnected]]);
         writeCallback = nil;
         canceledCommand = true;
     }
     
     if (notificationCallback) {
-        notificationCallback(@[errorStr]);
+        notificationCallback(@[[ErrorHelper createInvalidStateErrorDictionaryWithStatus:InvalidStateCodePeripheralDisconnected]]);
         notificationCallback = nil;
         canceledCommand = true;
     }
@@ -1002,12 +1041,10 @@ RCT_EXPORT_METHOD(requestMTU:(NSString *)deviceUUID mtu:(NSInteger)mtu callback:
     
     dispatch_async(commandDispatch, ^{
         NSString *peripheralUUIDString = [peripheral uuidAsString];
-           
-        NSString *errorStr = [NSString stringWithFormat:@"Peripheral did disconnect: %@", peripheralUUIDString];
         
         if ([peripheralUUIDString isEqualToString:currentDeviceUUID]) {
             // only cancel if command is associated with the disconnected device
-            [self cancelCurrentCommand:errorStr];
+            [self cancelCurrentCommandDueToDisconnect];
         }
         
         if (hasListeners) {
@@ -1026,7 +1063,7 @@ RCT_EXPORT_METHOD(requestMTU:(NSString *)deviceUUID mtu:(NSInteger)mtu callback:
     [retrieveServicesLatch removeAllObjects];
     dispatch_async(commandQueue, ^{
         if (retrieveServicesCallback != nil) {
-            retrieveServicesCallback(@[error, [NSNull null]]);
+            retrieveServicesCallback(@[[self createError:error], [NSNull null]]);
             retrieveServicesCallback = nil;
             [self completedCommand];
         }
@@ -1122,8 +1159,7 @@ RCT_EXPORT_METHOD(requestMTU:(NSString *)deviceUUID mtu:(NSInteger)mtu callback:
             [self sendEventWithName:@"BleManagerDidUpdateState" body:@{@"state":stateName}];
         }
         // Invoke all callbacks to handle in-flight commands
-        NSString *errorStr = @"Bluetooth has been disabled!";
-        [self cancelCurrentCommand:errorStr];
+        [self cancelCurrentCommandDueToDisconnect];
     });
 }
 
@@ -1136,9 +1172,15 @@ RCT_EXPORT_METHOD(requestMTU:(NSString *)deviceUUID mtu:(NSInteger)mtu callback:
     CBPeripheral *peripheral = [self findPeripheralByUUID:deviceUUIDString];
     
     if (!peripheral) {
-        NSString* err = [NSString stringWithFormat:@"Could not find peripherial with UUID %@", deviceUUIDString];
         NSLog(@"Could not find peripherial with UUID %@", deviceUUIDString);
-        callback(@[err]);
+        callback(@[[ErrorHelper createInvalidStateErrorDictionaryWithStatus:InvalidStateCodePeripheralNotFound]]);
+        
+        return nil;
+    }
+    
+    if([peripheral state] != CBPeripheralStateConnected){
+        NSLog(@"Peripheral is disconnected: %@", deviceUUIDString);
+        callback(@[[ErrorHelper createInvalidStateErrorDictionaryWithStatus:InvalidStateCodePeripheralNotConnected]]);
         
         return nil;
     }
@@ -1153,7 +1195,7 @@ RCT_EXPORT_METHOD(requestMTU:(NSString *)deviceUUID mtu:(NSInteger)mtu callback:
         NSLog(@"Could not find service with UUID %@ on peripheral with UUID %@",
               serviceUUIDString,
               peripheral.identifier.UUIDString);
-        callback(@[err]);
+        callback(@[[ErrorHelper createInvalidArgumentErrorDictionaryWithMessage:err]]);
         return nil;
     }
     
@@ -1176,7 +1218,7 @@ RCT_EXPORT_METHOD(requestMTU:(NSString *)deviceUUID mtu:(NSInteger)mtu callback:
               characteristicUUIDString,
               serviceUUIDString,
               peripheral.identifier.UUIDString);
-        callback(@[err]);
+        callback(@[[ErrorHelper createInvalidArgumentErrorDictionaryWithMessage:err]]);
         return nil;
     }
     
