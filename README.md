@@ -92,6 +92,72 @@ AppRegistry.registerComponent("MyAwesomeApp", () => App);
 
 Or, you can still look into the whole [example](https://github.com/innoveit/react-native-ble-manager/tree/master/example) folder for a standalone project.
 
+## Errors Types
+
+When an operation fails an exception will be thrown.  Currently there are four defined types
+
+### `ATTResponseError`
+
+`ATTResponseError` provides an error code directly from the Bluetooth layer as defined by the Bluetooth specification. Official status codes according to the BLE specification are defined in `ATTResponseCode`.  Note that Android, iOS, or firmware may provide status values outside of these official values in `ATTResponseCode`.
+
+```typescript
+interface ATTResponseError {
+    type: BTErrorType.ATT_RESPONSE;
+    status: ATTResponseCode;
+}
+```
+
+### `InvalidStateError`
+
+`InvalidStateError` results when an operation cannot be completed due to an invalid system state.  For example, the provided device for an operation is not connected, bluetooth is disabled, ect.
+
+```typescript
+interface InvalidStateError {
+    type: BTErrorType.INVALID_STATE;
+    status: InvalidStateCode;
+}
+```
+
+NOTE:  Currently `InvalidStateError` should not be used for progmatic purposes and is currently useful for debugging and logging purposes only.  This is due to the fact that the catch-all `UNKNOWN_BTERROR` can be triggered by any error include those already defined in `InvalidStateCode`, as well as the fact that different error codes may be returned from different platforms (Android vs iOS) under similar circumstances.  The full list of possible reasons is given as follows:
+
+```typescript
+enum InvalidStateCode {
+    UNKNOWN_BTERROR = 1, // Error is related to BLE but otherwise unknown, not necessarily a bug
+    NOT_SUPPORTED = 2, // Feature not available on this platform or device
+    CONNECTION_ATTEMPT_FAILED = 3, // Attempt to start a connection but it failed to
+    PERIPHERAL_NOT_CONNECTED = 4, // The peripheral is not connected
+    PERIPHERAL_DISCONNECTED = 5, // The peripheral was recently connected but lost connection
+    PERIPHERAL_NOT_FOUND = 6, // The peripheral is not known, for example it was not found during a connection event
+    RESOURCE_NOT_FOUND = 7, // The characteristic, service, descriptor does not exist
+    BT_DISABLED = 8, // BLE is disabled
+    BT_UNSUPPORTED = 9, // BLE is unsupported on the provided device
+    GUI_RESOURCE_UNAVAILABLE = 10, // Failed to get UI resource like the current acitivity, likely b
+    CONNECTION_LIMIT_REACHED = 11, // Connection limit reached
+}
+```
+
+### `InvalidArgumentError`
+
+This error is returned when the API is given incorrect arguments.  This is indicative of an incorrect usage of the API.
+
+```typescript
+interface InvalidArgumentError {
+    type: BTErrorType.INVALID_ARGUMENT;
+    message: string;
+}
+```
+
+### `UnexpectedError`
+
+This error generally shouldn't happen and is indicative of a bug in the `react-native-ble-manager`.
+
+```typescript
+export interface UnexpectedError {
+    type: BTErrorType.UNEXPECTED;
+    message: string;
+}
+```
+
 ## Methods
 
 ### start(options)
