@@ -73,7 +73,11 @@ declare module "react-native-ble-manager" {
     message: string;
   }
 
-  export type BTError = ATTResponseError | InvalidStateError | InvalidArgumentError | UnexpectedError;
+  export type BTErrorData = ATTResponseError | InvalidStateError | InvalidArgumentError | UnexpectedError;
+
+  export class BleError extends Error {
+    constructor(data: BTErrorData);
+  }
 
   export interface Peripheral {
     id: string;
@@ -169,7 +173,7 @@ declare module "react-native-ble-manager" {
     queueSleepTime?: number
   ): Promise<void>;
 
-  export function readRSSI(peripheralID: string): Promise<void>;
+  export function readRSSI(peripheralID: string): Promise<number>;
 
   export function getConnectedPeripherals(
     serviceUUIDs: string[]
@@ -250,4 +254,5 @@ declare module "react-native-ble-manager" {
     peripheralID: string,
     serviceUUIDs?: string[]
   ): Promise<PeripheralInfo>;
+
 }

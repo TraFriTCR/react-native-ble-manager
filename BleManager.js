@@ -2,6 +2,12 @@
 var React = require("react-native");
 var bleManager = React.NativeModules.BleManager;
 
+class BleError extends Error {
+  constructor(data) {
+    this.data = data;
+  }
+}
+
 class BleManager {
   constructor() {
     this.isPeripheralConnected = this.isPeripheralConnected.bind(this);
@@ -15,7 +21,7 @@ class BleManager {
         characteristicUUID,
         (error, data) => {
           if (error) {
-            reject(error);
+            reject(new BleError(error));
           } else {
             fulfill(data);
           }
@@ -28,7 +34,7 @@ class BleManager {
     return new Promise((fulfill, reject) => {
       bleManager.readRSSI(peripheralId, (error, rssi) => {
         if (error) {
-          reject(error);
+          reject(new BleError(error));
         } else {
           fulfill(rssi);
         }
@@ -40,7 +46,7 @@ class BleManager {
     return new Promise((fulfill, reject) => {
       bleManager.refreshCache(peripheralId, (error, result) => {
         if (error) {
-          reject(error);
+          reject(new BleError(error));
         } else {
           fulfill(result);
         }
@@ -55,7 +61,7 @@ class BleManager {
         services,
         (error, peripheral) => {
           if (error) {
-            reject(error);
+            reject(new BleError(error));
           } else {
             fulfill(peripheral);
           }
@@ -77,7 +83,7 @@ class BleManager {
         maxByteSize,
         error => {
           if (error) {
-            reject(error);
+            reject(new BleError(error));
           } else {
             fulfill();
           }
@@ -110,7 +116,7 @@ class BleManager {
         queueSleepTime,
         error => {
           if (error) {
-            reject(error);
+            reject(new BleError(error));
           } else {
             fulfill();
           }
@@ -123,7 +129,7 @@ class BleManager {
     return new Promise((fulfill, reject) => {
       bleManager.connect(peripheralId, error => {
         if (error) {
-          reject(error);
+          reject(new BleError(error));
         } else {
           fulfill();
         }
@@ -135,7 +141,7 @@ class BleManager {
     return new Promise((fulfill, reject) => {
       bleManager.createBond(peripheralId,peripheralPin, error => {
         if (error) {
-          reject(error);
+          reject(new BleError(error));
         } else {
           fulfill();
         }
@@ -147,7 +153,7 @@ class BleManager {
     return new Promise((fulfill, reject) => {
       bleManager.removeBond(peripheralId, error => {
         if (error) {
-          reject(error);
+          reject(new BleError(error));
         } else {
           fulfill();
         }
@@ -159,7 +165,7 @@ class BleManager {
     return new Promise((fulfill, reject) => {
       bleManager.disconnect(peripheralId, force, error => {
         if (error) {
-          reject(error);
+          reject(new BleError(error));
         } else {
           fulfill();
         }
@@ -175,7 +181,7 @@ class BleManager {
         characteristicUUID,
         error => {
           if (error) {
-            reject(error);
+            reject(new BleError(error));
           } else {
             fulfill();
           }
@@ -198,7 +204,7 @@ class BleManager {
         buffer,
         error => {
           if (error) {
-            reject(error);
+            reject(new BleError(error));
           } else {
             fulfill();
           }
@@ -215,7 +221,7 @@ class BleManager {
         characteristicUUID,
         error => {
           if (error) {
-            reject(error);
+            reject(new BleError(error));
           } else {
             fulfill();
           }
@@ -235,7 +241,7 @@ class BleManager {
       }
       bleManager.start(options, error => {
         if (error) {
-          reject(error);
+          reject(new BleError(error));
         } else {
           fulfill();
         }
@@ -276,7 +282,7 @@ class BleManager {
         scanningOptions,
         error => {
           if (error) {
-            reject(error);
+            reject(new BleError(error));
           } else {
             fulfill();
           }
@@ -289,7 +295,7 @@ class BleManager {
     return new Promise((fulfill, reject) => {
       bleManager.stopScan(error => {
         if (error != null) {
-          reject(error);
+          reject(new BleError(error));
         } else {
           fulfill();
         }
@@ -301,7 +307,7 @@ class BleManager {
     return new Promise((fulfill, reject) => {
       bleManager.isBluetoothEnabled((error, enabled) => {
         if (error != null) {
-          reject(error);
+          reject(new BleError(error));
         } else {
           fulfill(enabled);
         }
@@ -313,7 +319,7 @@ class BleManager {
     return new Promise((fulfill, reject) => {
       bleManager.enableBluetooth(error => {
         if (error != null) {
-          reject(error);
+          reject(new BleError(error));
         } else {
           fulfill();
         }
@@ -325,7 +331,7 @@ class BleManager {
     return new Promise((fulfill, reject) => {
       bleManager.getConnectedPeripherals(serviceUUIDs, (error, result) => {
         if (error) {
-          reject(error);
+          reject(new BleError(error));
         } else {
           if (result != null) {
             fulfill(result);
@@ -341,7 +347,7 @@ class BleManager {
     return new Promise((fulfill, reject) => {
       bleManager.getBondedPeripherals((error, result) => {
         if (error) {
-          reject(error);
+          reject(new BleError(error));
         } else {
           if (result != null) {
             fulfill(result);
@@ -357,7 +363,7 @@ class BleManager {
     return new Promise((fulfill, reject) => {
       bleManager.getDiscoveredPeripherals((error, result) => {
         if (error) {
-          reject(error);
+          reject(new BleError(error));
         } else {
           if (result != null) {
             fulfill(result);
@@ -373,7 +379,7 @@ class BleManager {
     return new Promise((fulfill, reject) => {
       bleManager.removePeripheral(peripheralId, error => {
         if (error) {
-          reject(error);
+          reject(new BleError(error));
         } else {
           fulfill();
         }
@@ -402,7 +408,7 @@ class BleManager {
         connectionPriority,
         (error, status) => {
           if (error) {
-            reject(error);
+            reject(new BleError(error));
           } else {
             fulfill(status);
           }
@@ -415,7 +421,7 @@ class BleManager {
     return new Promise((fulfill, reject) => {
       bleManager.requestMTU(peripheralId, mtu, (error, mtu) => {
         if (error) {
-          reject(error);
+          reject(new BleError(error));
         } else {
           fulfill(mtu);
         }
@@ -429,3 +435,4 @@ class BleManager {
 }
 
 module.exports = new BleManager();
+module.exports.BleError = BleError;
