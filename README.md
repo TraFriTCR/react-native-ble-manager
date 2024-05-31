@@ -94,7 +94,7 @@ Or, you can still look into the whole [example](https://github.com/innoveit/reac
 
 ## Errors Types
 
-When an operation fails an exception will be thrown.  Currently there are four defined types
+When an operation fails an error of type `BleError` will be thrown.  Currently there are four defined data types which can be contained in `BleError.data`
 
 ### `ATTResponseError`
 
