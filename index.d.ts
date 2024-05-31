@@ -76,6 +76,7 @@ declare module "react-native-ble-manager" {
   export type BTErrorData = ATTResponseError | InvalidStateError | InvalidArgumentError | UnexpectedError;
 
   export class BleError extends Error {
+    public readonly data: BTErrorData;
     constructor(data: BTErrorData);
   }
 
