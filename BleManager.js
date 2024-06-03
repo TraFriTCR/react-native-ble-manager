@@ -4,6 +4,7 @@ var bleManager = React.NativeModules.BleManager;
 
 class BleError extends Error {
   constructor(data) {
+    super();
     this.data = data;
   }
 }
