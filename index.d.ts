@@ -197,7 +197,11 @@ declare module "react-native-ble-manager" {
   ): Promise<void>;
   export function isBluetoothEnabled(): Promise<boolean>;
   /// Android only
+  export function isLocationEnabled(): Promise<boolean>;
+  /// Android only
   export function enableBluetooth(): Promise<void>;
+  // [Android only]
+  export function enableLocation(): Promise<void>;
   // [Android only]
   export function refreshCache(peripheralID: string): Promise<void>;
   // [Android only API 21+]

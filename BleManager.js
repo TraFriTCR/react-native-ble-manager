@@ -365,9 +365,33 @@ class BleManager {
     });
   };
 
+  isLocationEnabled() {
+    return new Promise((fulfill, reject) => {
+      bleManager.isLocationEnabled((error, enabled) => {
+        if (error != null) {
+          reject(new BleError(error));
+        } else {
+          fulfill(enabled);
+        }
+      });
+    });
+  }
+
   enableBluetooth() {
     return new Promise((fulfill, reject) => {
       bleManager.enableBluetooth(error => {
+        if (error != null) {
+          reject(new BleError(error));
+        } else {
+          fulfill();
+        }
+      });
+    });
+  }
+
+  enableLocation() {
+    return new Promise((fulfill, reject) => {
+      bleManager.enableLocation(error => {
         if (error != null) {
           reject(new BleError(error));
         } else {
