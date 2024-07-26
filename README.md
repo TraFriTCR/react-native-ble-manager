@@ -295,6 +295,19 @@ BleManager.isBluetoothEnabled()
   });
 ```
 
+### isLocationEnabled()
+
+Check if location services is enabled
+Returns a `Promise<boolean>` object.
+
+**Examples**
+```js
+BleManager.isLocationEnabled()
+  .then(result => {
+    // true if bluetooth is enabled
+  });
+```
+
 ### enableBluetooth() [Android only]
 
 Create the request to the user to activate the bluetooth.
@@ -311,6 +324,25 @@ BleManager.enableBluetooth()
   .catch((error) => {
     // Failure code
     console.log("The user refuse to enable bluetooth");
+  });
+```
+
+### enableLocation
+
+Create a request to the user to enable location services
+Returns a `Promise` object.
+
+**Examples**
+
+```js
+BleManager.enableLocation()
+  .then(() => {
+    // Success code
+    console.log("Location services is already enabled or the user confirm");
+  })
+  .catch((error) => {
+    // Failure code
+    console.log("The user refuse to enable location services");
   });
 ```
 
@@ -792,6 +824,22 @@ The BLE change state.
 
 ```js
 bleManagerEmitter.addListener("BleManagerDidUpdateState", (args) => {
+  // The new state: args.state
+});
+```
+
+### BleManagerDidUpdateLocationState
+
+The location services change state
+
+**Arguments**
+
+- state - boolean - the new location services enabled state 
+
+**Examples**
+
+```js
+bleManagerEmitter.addListener("BleManagerDidUpdateLocationState", (args) => {
   // The new state: args.state
 });
 ```
