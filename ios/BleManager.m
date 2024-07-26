@@ -84,7 +84,7 @@ bool hasListeners;
 
 - (NSArray<NSString *> *)supportedEvents
 {
-    return @[@"BleManagerDidUpdateValueForCharacteristic", @"BleManagerStopScan", @"BleManagerDiscoverPeripheral", @"BleManagerConnectPeripheral", @"BleManagerDisconnectPeripheral", @"BleManagerDidUpdateState", @"BleManagerCentralManagerWillRestoreState", @"BleManagerDidUpdateNotificationStateFor"];
+    return @[@"BleManagerDidUpdateValueForCharacteristic", @"BleManagerStopScan", @"BleManagerDiscoverPeripheral", @"BleManagerConnectPeripheral", @"BleManagerDisconnectPeripheral", @"BleManagerDidUpdateState", @"BleManagerCentralManagerWillRestoreState", @"BleManagerDidUpdateNotificationStateFor", @"BleManagerDidUpdateLocationState"];
 }
 
 -(NSDictionary*) createError:(NSError *)error
@@ -889,9 +889,19 @@ RCT_EXPORT_METHOD(isBluetoothEnabled:(nonnull RCTResponseSenderBlock)callback)
   callback(@[[NSNull null], isBluetoothEnabled]);
 };
 
+RCT_EXPORT_METHOD(isLocationEnabled:(nonnull RCTResponseSenderBlock)callback)
+{
+  callback(@[[ErrorHelper createInvalidStateErrorDictionaryWithStatus:InvalidStateCodeNotSupported]]);
+};
+
 RCT_EXPORT_METHOD(enableBluetooth:(nonnull RCTResponseSenderBlock)callback)
 {
-    callback(@[[ErrorHelper createInvalidStateErrorDictionaryWithStatus:InvalidStateCodeNotSupported]]);
+  callback(@[[ErrorHelper createInvalidStateErrorDictionaryWithStatus:InvalidStateCodeNotSupported]]);
+}
+
+RCT_EXPORT_METHOD(enableLocation:(nonnull RCTResponseSenderBlock)callback)
+{
+  callback(@[[ErrorHelper createInvalidStateErrorDictionaryWithStatus:InvalidStateCodeNotSupported]]);
 }
 
 RCT_EXPORT_METHOD(getBondedPeripherals:(nonnull RCTResponseSenderBlock)callback)

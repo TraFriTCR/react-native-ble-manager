@@ -9,11 +9,14 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.IntentSender;
 import android.content.pm.PackageManager;
+import android.location.LocationManager;
 import android.os.Build;
 
 import androidx.annotation.Nullable;
 
+import android.provider.Settings;
 import android.util.Log;
 
 import com.facebook.react.bridge.ActivityEventListener;
@@ -29,13 +32,11 @@ import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.modules.core.RCTNativeAppEventEmitter;
 
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 import static android.app.Activity.RESULT_OK;
@@ -47,16 +48,26 @@ import static it.innove.ErrorHelper.createtInvalidArgumentErrorWritableMap;
 import static it.innove.ErrorHelper.createUnexpectedErrorWritableMap;
 import static it.innove.ErrorHelper.InvalidStateCode;
 
+import com.google.android.gms.common.api.ResolvableApiException;
+import com.google.android.gms.location.LocationRequest;
+import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.location.LocationSettingsRequest;
+import com.google.android.gms.location.LocationSettingsResponse;
+import com.google.android.gms.tasks.Task;
+
 class BleManager extends ReactContextBaseJavaModule {
 
     public static final String LOG_TAG = "ReactNativeBleManager";
-    private static final int ENABLE_REQUEST = 539;
+    private static final int ENABLE_BLUETOOTH_REQUEST = 539;
+    private static final int ENABLE_LOCATION_REQUEST = 999;
 
     private BluetoothAdapter bluetoothAdapter;
+    private LocationManager locationManager;
     private BluetoothManager bluetoothManager;
     private Context context;
     private ReactApplicationContext reactContext;
     private Callback enableBluetoothCallback;
+    private Callback enableLocationCallback;
     private ScanManager scanManager;
     private boolean forceLegacy;
 
@@ -69,16 +80,27 @@ class BleManager extends ReactContextBaseJavaModule {
         @Override
         public void onActivityResult(Activity activity, int requestCode, int resultCode, Intent intent) {
             Log.d(LOG_TAG, "onActivityResult");
-            if (requestCode == ENABLE_REQUEST && enableBluetoothCallback != null) {
-                if (resultCode == RESULT_OK) {
-                    enableBluetoothCallback.invoke();
-                } else {
-                    enableBluetoothCallback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.BT_DISABLED));
+            if (requestCode == ENABLE_BLUETOOTH_REQUEST) {
+                if (enableBluetoothCallback != null) {
+                    if (resultCode == RESULT_OK) {
+                        enableBluetoothCallback.invoke();
+                    } else {
+                        enableBluetoothCallback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.BT_DISABLED));
+                    }
+                    enableBluetoothCallback = null;
                 }
-                enableBluetoothCallback = null;
+            }
+            if (requestCode == ENABLE_LOCATION_REQUEST) {
+                if (enableLocationCallback != null) {
+                    if (resultCode == RESULT_OK) {
+                        enableLocationCallback.invoke();
+                    } else {
+                        enableLocationCallback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.BT_DISABLED));
+                    }
+                    enableLocationCallback = null;
+                }
             }
         }
-
     };
 
     // key is the MAC Address
@@ -116,6 +138,13 @@ class BleManager extends ReactContextBaseJavaModule {
             bluetoothAdapter = manager.getAdapter();
         }
         return bluetoothAdapter;
+    }
+
+    private LocationManager getLocationManager() {
+        if (locationManager == null) {
+            locationManager = (LocationManager) context.getSystemService(Context.LOCATION_SERVICE);
+        }
+        return locationManager;
     }
 
     private BluetoothManager getBluetoothManager() {
@@ -156,6 +185,11 @@ class BleManager extends ReactContextBaseJavaModule {
             callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.BT_UNSUPPORTED));
             return;
         }
+        if (getLocationManager() == null) {
+            Log.d(LOG_TAG, "No location support");
+            callback.invoke("No location service support");
+            return;
+        }
         forceLegacy = false;
         if (options.hasKey("forceLegacy")) {
             forceLegacy = options.getBoolean("forceLegacy");
@@ -167,12 +201,18 @@ class BleManager extends ReactContextBaseJavaModule {
             scanManager = new LegacyScanManager(reactContext, this);
         }
 
+        IntentFilter locationIntentFilter = new IntentFilter(LocationManager.MODE_CHANGED_ACTION);
+        locationIntentFilter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
+        context.registerReceiver(mReceiver, locationIntentFilter);
+
         IntentFilter filter = new IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED);
         filter.addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
         context.registerReceiver(mReceiver, filter);
+
         IntentFilter intentFilter = new IntentFilter(BluetoothDevice.ACTION_PAIRING_REQUEST);
         intentFilter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         context.registerReceiver(mReceiver, intentFilter);
+
         callback.invoke();
         Log.d(LOG_TAG, "BleManager initialized");
     }
@@ -184,6 +224,29 @@ class BleManager extends ReactContextBaseJavaModule {
         } else {
           callback.invoke(null, true);
         }
+    }
+
+    private boolean isLocationServicesEnabled() {
+        if (getLocationManager() == null) {
+            return false;
+        } else {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                return locationManager.isLocationEnabled();
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                int mode = Settings.Secure.getInt(context.getContentResolver(), Settings.Secure.LOCATION_MODE,
+                        Settings.Secure.LOCATION_MODE_OFF);
+                return mode != Settings.Secure.LOCATION_MODE_OFF;
+            } else {
+                boolean gpsEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER);
+                boolean networkEnabled = locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
+                return gpsEnabled || networkEnabled;
+            }
+        }
+    }
+
+    @ReactMethod
+    public void isLocationEnabled(Callback callback) {
+        callback.invoke(null, isLocationServicesEnabled());
     }
 
     @ReactMethod
@@ -199,7 +262,43 @@ class BleManager extends ReactContextBaseJavaModule {
             if (getCurrentActivity() == null)
                 callback.invoke(createInvalidStateErrorWritableMap(InvalidStateCode.GUI_RESOURCE_UNAVAILABLE));
             else
-                getCurrentActivity().startActivityForResult(intentEnable, ENABLE_REQUEST);
+                getCurrentActivity().startActivityForResult(intentEnable, ENABLE_BLUETOOTH_REQUEST);
+        } else
+            callback.invoke();
+    }
+
+    @ReactMethod
+    public void enableLocation(Callback callback) {
+        if (getLocationManager() == null) {
+            Log.d(LOG_TAG, "Location services not supported");
+            callback.invoke("No location service support");
+            return;
+        }
+        if (!isLocationServicesEnabled()) {
+
+            LocationRequest locationRequest = LocationRequest.create();
+            LocationSettingsRequest.Builder builder = new LocationSettingsRequest.Builder()
+                    .addLocationRequest(locationRequest);
+
+            Task<LocationSettingsResponse> task = LocationServices.getSettingsClient(reactContext)
+                    .checkLocationSettings(builder.build());
+            task.addOnSuccessListener(locationSettingsResponse -> {
+                callback.invoke();
+            });
+
+            task.addOnFailureListener(e -> {
+                if (e instanceof ResolvableApiException) {
+                    try {
+                        enableLocationCallback = callback;
+                        // Show the dialog by calling startResolutionForResult(),
+                        // and check the result in onActivityResult().
+                        ResolvableApiException resolvable = (ResolvableApiException) e;
+                        resolvable.startResolutionForResult(getCurrentActivity(), ENABLE_LOCATION_REQUEST);
+                    } catch (IntentSender.SendIntentException sendEx) {
+                        // Ignore the error.
+                    }
+                }
+            });
         } else
             callback.invoke();
     }
@@ -507,9 +606,16 @@ class BleManager extends ReactContextBaseJavaModule {
                 map.putString("state", stringState);
                 Log.d(LOG_TAG, "state: " + stringState);
                 sendEvent("BleManagerDidUpdateState", map);
-
             }
 
+            if (action.equals(LocationManager.MODE_CHANGED_ACTION)) {
+                boolean isLocationEnabled = intent.getBooleanExtra(LocationManager.EXTRA_LOCATION_ENABLED, false);
+
+                WritableMap map = Arguments.createMap();
+                map.putBoolean("state", isLocationEnabled);
+                Log.d(LOG_TAG, "state: " + isLocationEnabled);
+                sendEvent("BleManagerDidUpdateLocationState", map);
+            }
         }
     };
 
