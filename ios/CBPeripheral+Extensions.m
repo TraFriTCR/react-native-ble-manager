@@ -37,7 +37,7 @@ static char ADVERTISEMENT_RSSI_IDENTIFER;
   if ([self advertising]) {
     [dictionary setObject: [self advertising] forKey: @"advertising"];
   }
-  
+   
   if([[self services] count] > 0) {
     [self serviceAndCharacteristicInfo: dictionary];
   }
@@ -188,11 +188,11 @@ static char ADVERTISEMENT_RSSI_IDENTIFER;
   
   // This can move into the CBPeripherial Extension
   for (CBService *service in [self services]) {
-    [serviceList addObject:[[service UUID] UUIDString]];
+    [serviceList addObject:@{ @"uuid": [[[service UUID] UUIDString] lowercaseString] }];
     for (CBCharacteristic *characteristic in service.characteristics) {
       NSMutableDictionary *characteristicDictionary = [NSMutableDictionary new];
-      [characteristicDictionary setObject:[[service UUID] UUIDString] forKey:@"service"];
-      [characteristicDictionary setObject:[[characteristic UUID] UUIDString] forKey:@"characteristic"];
+      [characteristicDictionary setObject:[[[service UUID] UUIDString] lowercaseString] forKey:@"service"];
+      [characteristicDictionary setObject:[[[characteristic UUID] UUIDString] lowercaseString] forKey:@"characteristic"];
       
       if ([characteristic value] && [[characteristic value] length] > 0) {
         [characteristicDictionary setObject:dataToArrayBuffer([characteristic value]) forKey:@"value"];
@@ -209,7 +209,7 @@ static char ADVERTISEMENT_RSSI_IDENTIFER;
       NSMutableArray *descriptorList = [NSMutableArray new];
       for (CBDescriptor *descriptor in characteristic.descriptors) {
         NSMutableDictionary *descriptorDictionary = [NSMutableDictionary new];
-        [descriptorDictionary setObject:[[descriptor UUID] UUIDString] forKey:@"descriptor"];
+        [descriptorDictionary setObject:[[[descriptor UUID] UUIDString] lowercaseString] forKey:@"descriptor"];
         if ([descriptor value]) { // should always have a value?
           [descriptorDictionary setObject:[descriptor value] forKey:@"value"];
         }
@@ -305,3 +305,4 @@ id dataToArrayBuffer(NSData* data)
 }
 
 @end
+

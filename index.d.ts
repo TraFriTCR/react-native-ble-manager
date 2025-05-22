@@ -250,7 +250,6 @@ declare module "react-native-ble-manager" {
   }
 
   export interface PeripheralInfo extends Peripheral {
-    serviceUUIDs?: string[];
     characteristics?: Characteristic[];
     services?: Service[];
   }
