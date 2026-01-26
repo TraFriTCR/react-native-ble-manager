@@ -442,6 +442,10 @@ public class Peripheral extends BluetoothGattCallback {
 	public void onCharacteristicRead(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
 		super.onCharacteristicRead(gatt, characteristic, status);
 
+		// Capture the read value before posting to the main thread to avoid
+		// a race with notifications updating the characteristic value.
+		final byte[] dataValue =
+				status == BluetoothGatt.GATT_SUCCESS ? copyOf(characteristic.getValue()) : null;
 		mainHandler.post(() -> {
 			if (status != BluetoothGatt.GATT_SUCCESS) {
 				if (status == GATT_AUTH_FAIL || status == GATT_INSUFFICIENT_AUTHENTICATION) {
@@ -450,7 +454,6 @@ public class Peripheral extends BluetoothGattCallback {
 				readCallback.invoke(createATTResponseErrorWritableMap(status));
 				readCallback = null;
 			} else if (readCallback != null) {
-				final byte[] dataValue = copyOf(characteristic.getValue());
 				readCallback.invoke(null, BleManager.bytesToWritableArray(dataValue));
 				readCallback = null;
 			}
