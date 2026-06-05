@@ -140,7 +140,8 @@ bool hasListeners;
         NSLog(@"Read value [%@]: (%lu) %@", characteristic.UUID, [characteristic.value length], characteristic.value);
         
         if (isCompatibleCallback) {
-            readCallback(@[[NSNull null], ([characteristic.value length] > 0) ? [characteristic.value toArray] : [NSNull null]]);
+            NSArray *readValue = characteristic.value ? [characteristic.value toArray] : @[];
+            readCallback(@[[NSNull null], readValue]);
             readCallback = nil;
             [self completedCommand];
         } else {
