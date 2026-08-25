@@ -157,7 +157,7 @@ declare module "react-native-ble-manager" {
     peripheralID: string,
     serviceUUID: string,
     characteristicUUID: string
-  ): Promise<any>;
+  ): Promise<Uint8Array>;
   export function write(
     peripheralID: string,
     serviceUUID: string,

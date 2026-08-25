@@ -73,7 +73,7 @@ class BleManager {
           if (error) {
             reject(new BleError(error));
           } else {
-            fulfill(data);
+            fulfill(Uint8Array.from(data));
           }
         }
       );

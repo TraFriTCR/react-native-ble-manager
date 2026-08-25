@@ -430,7 +430,7 @@ Returns a `Promise` object.
 ### read(peripheralId, serviceUUID, characteristicUUID)
 
 Read the current value of the specified characteristic, you need to call `retrieveServices` method before.
-Returns a `Promise` object.
+Returns a `Promise` that resolves to a `Uint8Array` on both Android and iOS.
 
 **Arguments**
 
@@ -450,7 +450,7 @@ BleManager.read(
     // Success code
     console.log("Read: " + readData);
 
-    const buffer = Buffer.Buffer.from(readData); //https://github.com/feross/buffer#convert-arraybuffer-to-buffer
+    const buffer = Buffer.Buffer.from(readData); // https://github.com/feross/buffer#convert-arraybuffer-to-buffer
     const sensorData = buffer.readUInt8(1, true);
   })
   .catch((error) => {
